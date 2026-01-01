@@ -1,0 +1,22 @@
+{
+    "name": "fin-terminal-frontend",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "build": "esbuild frontend/app.ts --bundle --outfile=frontend/app.js --format=iife --target=es2020 --minify",
+        "watch": "esbuild frontend/app.ts --bundle --outfile=frontend/app.js --format=iife --target=es2020 --watch",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:e2e": "playwright test",
+        "test:all": "vitest run && playwright test"
+    },
+    "devDependencies": {
+        "esbuild": "^0.20.0",
+        "typescript": "^5.3.0",
+        "lightweight-charts": "^4.1.0",
+        "vitest": "^2.0.0",
+        "jsdom": "^25.0.0",
+        "@playwright/test": "^1.48.0"
+    }
+}

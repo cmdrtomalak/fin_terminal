@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fin Terminal</title>
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <header class="terminal-header">
+            <div class="logo">FIN TERMINAL</div>
+            <div class="command-bar">
+                <input type="text" id="command-input" placeholder="Enter ticker symbol or company name..." autocomplete="off">
+                <div id="search-results" class="search-dropdown"></div>
+            </div>
+            <div class="header-info">
+                <span id="current-time"></span>
+            </div>
+        </header>
+
+        <div class="terminal-body">
+            <aside class="sidebar">
+                <div class="function-keys">
+                    <button class="fn-key yellow" data-fn="EQUITY">EQUITY</button>
+                    <button class="fn-key yellow" data-fn="INDEX">INDEX</button>
+                    <button class="fn-key yellow" data-fn="CMDTY">CMDTY</button>
+                    <button class="fn-key yellow" data-fn="GOVT">GOVT</button>
+                </div>
+                <div class="quick-tickers">
+                    <div class="section-title">QUICK ACCESS</div>
+                    <div id="ticker-list"></div>
+                </div>
+            </aside>
+
+            <main class="main-content">
+                <div id="welcome-screen" class="panel welcome">
+                    <div class="welcome-text">
+                        <h1>FIN TERMINAL</h1>
+                        <p>Enter a ticker symbol or company name to begin</p>
+                        <div class="commands-help">
+                            <div class="cmd-row"><span class="cmd">AAPL</span> - Apple Inc.</div>
+                            <div class="cmd-row"><span class="cmd">MSFT</span> - Microsoft Corporation</div>
+                            <div class="cmd-row"><span class="cmd">GOOGL</span> - Alphabet Inc.</div>
+                            <div class="cmd-row"><span class="cmd">TSLA</span> - Tesla Inc.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="security-view" class="panel security hidden">
+                    <div class="panel-grid">
+                        <div class="panel-section quote-panel">
+                            <div class="panel-header">
+                                <div class="panel-header-left">
+                                    <span id="quote-symbol" class="symbol"></span>
+                                    <span id="quote-name" class="name"></span>
+                                    <span id="quote-exchange" class="exchange"></span>
+                                </div>
+                                <button id="statements-btn" class="ratios-btn">FA - STMTS</button>
+                                <button id="ratios-btn" class="ratios-btn">FA - RATIOS</button>
+                            </div>
+                            <div class="price-display">
+                                <div id="quote-price" class="price"></div>
+                                <div id="quote-change" class="change"></div>
+                            </div>
+                            <div class="quote-details" id="quote-details"></div>
+                        </div>
+
+                        <div class="panel-section chart-panel">
+                            <div class="panel-header">
+                                <span>GP - PRICE GRAPH</span>
+                                <div class="chart-controls">
+                                    <button class="chart-btn active" data-days="30">1M</button>
+                                    <button class="chart-btn" data-days="90">3M</button>
+                                    <button class="chart-btn" data-days="180">6M</button>
+                                    <button class="chart-btn" data-days="365">1Y</button>
+                                    <button class="chart-btn" data-days="730">2Y</button>
+                                    <button class="chart-btn" data-days="1095">3Y</button>
+                                    <button class="chart-btn" data-days="1825">5Y</button>
+                                    <button class="chart-btn" data-days="2555">7Y</button>
+                                    <button class="chart-btn" data-days="3650">10Y</button>
+                                </div>
+                            </div>
+                            <div id="chart-container"></div>
+                        </div>
+
+                        <div class="panel-section news-panel">
+                            <div class="panel-header">
+                                <span>N - NEWS</span>
+                            </div>
+                            <div id="news-feed"></div>
+                        </div>
+
+                        <div class="panel-section desc-panel">
+                            <div class="panel-header">
+                                <span>DES - DESCRIPTION</span>
+                            </div>
+                            <div id="company-description"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <footer class="terminal-footer">
+            <div class="footer-section">
+                <span class="key green">GO</span>
+                <span class="key red">CANCEL</span>
+                <span class="key">MENU</span>
+                <span class="key">HELP</span>
+            </div>
+            <div class="footer-section status">
+                <span id="status-text">READY</span>
+            </div>
+        </footer>
+    </div>
+
+    <div id="news-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <span id="modal-source" class="modal-source"></span>
+                <span id="modal-timestamp" class="modal-timestamp"></span>
+                <button id="modal-close" class="modal-close">&times;</button>
+            </div>
+            <h2 id="modal-title" class="modal-title"></h2>
+            <div id="modal-sentiment" class="modal-sentiment"></div>
+            <div id="modal-body" class="modal-body"></div>
+            <div class="modal-footer">
+                <a id="modal-link" class="modal-link" href="#" target="_blank">Open in Yahoo Finance</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="ratios-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content ratios-modal-content">
+            <div class="modal-header">
+                <span id="ratios-modal-title" class="modal-source">Financial Ratios</span>
+                <button id="ratios-modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="ratios-loading" class="ratios-loading">Loading financial data...</div>
+            <div id="ratios-body" class="ratios-body"></div>
+        </div>
+    </div>
+
+    <div id="index-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content index-modal-content">
+            <div class="modal-header">
+                <span class="modal-source">WORLD INDICES</span>
+                <button id="index-modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="index-loading" class="ratios-loading">Loading indices...</div>
+            <div id="index-body" class="index-body"></div>
+        </div>
+    </div>
+
+    <div id="statements-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content statements-modal-content">
+            <div class="modal-header">
+                <span id="statements-modal-title" class="modal-source">Financial Statements</span>
+                <div class="statements-tabs">
+                    <button class="stmt-tab active" data-tab="income">Income Statement</button>
+                    <button class="stmt-tab" data-tab="balance">Balance Sheet</button>
+                    <button class="stmt-tab" data-tab="cashflow">Cash Flow</button>
+                </div>
+                <button id="statements-modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="statements-loading" class="ratios-loading">Loading statements...</div>
+            <div id="statements-body" class="statements-body"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
