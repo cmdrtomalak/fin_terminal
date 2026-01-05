@@ -49,6 +49,7 @@ struct ChartResult {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct ChartMeta {
     symbol: String,
     currency: Option<String>,
@@ -126,6 +127,7 @@ struct DefaultKeyStatistics {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct FinancialData {
     total_cash: Option<YahooValue>,
     total_debt: Option<YahooValue>,
