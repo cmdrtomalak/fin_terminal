@@ -349,7 +349,9 @@ impl YahooClient {
 
     pub async fn get_chart(&self, symbol: &str, days: i64) -> Result<ChartData, reqwest::Error> {
         let (interval, range) = match days {
-            d if d <= 7 => ("15m", "5d"),
+            1 => ("5m", "1d"),
+            d if d <= 5 => ("15m", "5d"),
+            d if d <= 14 => ("30m", "1mo"),
             d if d <= 30 => ("1h", "1mo"),
             d if d <= 90 => ("1d", "3mo"),
             d if d <= 180 => ("1d", "6mo"),
@@ -370,6 +372,7 @@ impl YahooClient {
         let data: YahooChartResponse = response.json().await?;
 
         let mut points = Vec::new();
+        let cutoff_timestamp = chrono::Utc::now().timestamp() - (days * 24 * 60 * 60);
 
         if let Some(results) = data.chart.result {
             if let Some(result) = results.into_iter().next() {
@@ -382,6 +385,10 @@ impl YahooClient {
                         let volumes = quote.volume.unwrap_or_default();
 
                         for i in 0..timestamps.len() {
+                            let ts = timestamps[i];
+                            if ts < cutoff_timestamp {
+                                continue;
+                            }
                             if let (Some(o), Some(h), Some(l), Some(c)) = (
                                 opens.get(i).and_then(|v| *v),
                                 highs.get(i).and_then(|v| *v),
@@ -389,7 +396,7 @@ impl YahooClient {
                                 closes.get(i).and_then(|v| *v),
                             ) {
                                 points.push(ChartPoint {
-                                    timestamp: timestamps[i],
+                                    timestamp: ts,
                                     open: o,
                                     high: h,
                                     low: l,

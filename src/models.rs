@@ -213,3 +213,57 @@ pub struct TreasuryHistory {
     pub maturity: String,
     pub points: Vec<TreasuryHistoryPoint>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InternationalBondYield {
+    pub country: String,
+    pub country_code: String,
+    pub yield_10y: f64,
+    pub change: f64,
+    pub change_percent: f64,
+    pub date: String,
+    pub data_frequency: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InternationalBonds {
+    pub bonds: Vec<InternationalBondYield>,
+    pub updated_at: String,
+    pub data_delay: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BondHistoryPoint {
+    pub date: String,
+    pub timestamp: i64,
+    pub yield_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BondHistory {
+    pub country: String,
+    pub country_code: String,
+    pub points: Vec<BondHistoryPoint>,
+    pub data_delay: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Commodity {
+    pub symbol: String,
+    pub name: String,
+    pub category: String,
+    pub price: f64,
+    pub change: f64,
+    pub change_percent: f64,
+    pub day_high: f64,
+    pub day_low: f64,
+    pub volume: u64,
+    pub prev_close: f64,
+    pub unit: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommoditiesResponse {
+    pub commodities: Vec<Commodity>,
+    pub updated_at: String,
+}

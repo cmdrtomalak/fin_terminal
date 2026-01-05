@@ -27,6 +27,7 @@
                     <button class="fn-key yellow" data-fn="INDEX">INDEX</button>
                     <button class="fn-key yellow" data-fn="CMDTY">CMDTY</button>
                     <button class="fn-key yellow" data-fn="GOVT">GOVT</button>
+                    <button class="fn-key yellow" data-fn="INTL">INTL</button>
                 </div>
                 <div class="quick-tickers">
                     <div class="section-title">QUICK ACCESS</div>
@@ -71,6 +72,9 @@
                             <div class="panel-header">
                                 <span>GP - PRICE GRAPH</span>
                                 <div class="chart-controls">
+                                    <button class="chart-btn" data-days="1">1D</button>
+                                    <button class="chart-btn" data-days="5">5D</button>
+                                    <button class="chart-btn" data-days="14">2W</button>
                                     <button class="chart-btn active" data-days="30">1M</button>
                                     <button class="chart-btn" data-days="90">3M</button>
                                     <button class="chart-btn" data-days="180">6M</button>
@@ -212,6 +216,50 @@
             </div>
             <div id="treasury-chart-loading" class="ratios-loading">Loading yield history...</div>
             <div id="treasury-chart-container"></div>
+        </div>
+    </div>
+
+    <div id="bonds-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content bonds-modal-content">
+            <div class="modal-header">
+                <span class="modal-source">INTERNATIONAL GOVERNMENT BONDS (10Y)</span>
+                <span id="bonds-date" class="govt-date"></span>
+                <button id="bonds-modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="bonds-loading" class="ratios-loading">Loading bond yields...</div>
+            <div id="bonds-body" class="bonds-body"></div>
+        </div>
+    </div>
+
+    <div id="bonds-chart-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content bonds-chart-modal-content">
+            <div class="modal-header">
+                <span id="bonds-chart-title" class="modal-source">10 YR BOND YIELD</span>
+                <div class="bonds-chart-controls">
+                    <button class="bonds-range-btn" data-years="1">1Y</button>
+                    <button class="bonds-range-btn" data-years="3">3Y</button>
+                    <button class="bonds-range-btn" data-years="5">5Y</button>
+                    <button class="bonds-range-btn active" data-years="10">10Y</button>
+                </div>
+                <button id="bonds-chart-modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="bonds-chart-notice" class="bonds-data-notice"></div>
+            <div id="bonds-chart-loading" class="ratios-loading">Loading yield history...</div>
+            <div id="bonds-chart-container"></div>
+        </div>
+    </div>
+
+    <div id="commodities-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content commodities-modal-content">
+            <div class="modal-header">
+                <span class="modal-source">COMMODITIES</span>
+                <button id="commodities-modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="commodities-loading" class="ratios-loading">Loading commodities...</div>
+            <div id="commodities-body" class="commodities-body"></div>
         </div>
     </div>
 

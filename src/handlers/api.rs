@@ -6,16 +6,20 @@ use axum::{
 use serde::Deserialize;
 use std::sync::Arc;
 
+use crate::clients::bonds::BondsClient;
+use crate::clients::commodities::CommoditiesClient;
 use crate::clients::treasury::TreasuryClient;
 use crate::clients::yahoo::{generate_news, YahooClient};
 use crate::models::{
-    ChartData, Company, FinancialRatios, FinancialStatements, IndexQuote, NewsResponse, Quote,
-    TreasuryHistory, TreasuryRates,
+    BondHistory, ChartData, CommoditiesResponse, Company, FinancialRatios, FinancialStatements,
+    IndexQuote, InternationalBonds, NewsResponse, Quote, TreasuryHistory, TreasuryRates,
 };
 
 pub struct Clients {
     pub yahoo: YahooClient,
     pub treasury: TreasuryClient,
+    pub bonds: BondsClient,
+    pub commodities: CommoditiesClient,
 }
 
 pub type AppState = Arc<Clients>;
@@ -175,6 +179,60 @@ pub async fn get_treasury_history(
         Ok(history) => Ok(Json(history)),
         Err(e) => {
             tracing::error!("Treasury history fetch failed: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn get_international_bonds(
+    State(clients): State<AppState>,
+) -> Result<Json<InternationalBonds>, StatusCode> {
+    match clients.bonds.get_international_bonds().await {
+        Ok(bonds) => Ok(Json(bonds)),
+        Err(e) => {
+            tracing::error!("International bonds fetch failed: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct BondHistoryQuery {
+    #[serde(default = "default_bond_history_years")]
+    years: u32,
+}
+
+fn default_bond_history_years() -> u32 {
+    10
+}
+
+pub async fn get_bond_history(
+    State(clients): State<AppState>,
+    Path(country_code): Path<String>,
+    Query(params): Query<BondHistoryQuery>,
+) -> Result<Json<BondHistory>, StatusCode> {
+    let years = params.years.min(10);
+
+    match clients
+        .bonds
+        .get_bond_history(&country_code.to_uppercase(), years)
+        .await
+    {
+        Ok(history) => Ok(Json(history)),
+        Err(e) => {
+            tracing::error!("Bond history fetch failed: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn get_commodities(
+    State(clients): State<AppState>,
+) -> Result<Json<CommoditiesResponse>, StatusCode> {
+    match clients.commodities.get_commodities().await {
+        Ok(data) => Ok(Json(data)),
+        Err(e) => {
+            tracing::error!("Commodities fetch failed: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }

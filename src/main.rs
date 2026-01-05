@@ -1,4 +1,6 @@
 use axum::{routing::get, Router};
+use fin_terminal::clients::bonds::BondsClient;
+use fin_terminal::clients::commodities::CommoditiesClient;
 use fin_terminal::clients::treasury::TreasuryClient;
 use fin_terminal::clients::yahoo::YahooClient;
 use fin_terminal::handlers::{self, AppState, Clients};
@@ -19,6 +21,8 @@ async fn main() {
     let clients: AppState = Arc::new(Clients {
         yahoo: YahooClient::new(),
         treasury: TreasuryClient::new(),
+        bonds: BondsClient::new(),
+        commodities: CommoditiesClient::new(),
     });
 
     let api_routes = Router::new()
@@ -34,6 +38,12 @@ async fn main() {
             "/treasury/history/:maturity",
             get(handlers::get_treasury_history),
         )
+        .route("/bonds", get(handlers::get_international_bonds))
+        .route(
+            "/bonds/history/:country_code",
+            get(handlers::get_bond_history),
+        )
+        .route("/commodities", get(handlers::get_commodities))
         .with_state(clients);
 
     let app = Router::new()

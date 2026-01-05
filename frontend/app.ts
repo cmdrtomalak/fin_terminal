@@ -205,6 +205,54 @@ interface TreasuryHistory {
     points: TreasuryHistoryPoint[];
 }
 
+interface InternationalBondYield {
+    country: string;
+    country_code: string;
+    yield_10y: number;
+    change: number;
+    change_percent: number;
+    date: string;
+    data_frequency: string;
+}
+
+interface InternationalBonds {
+    bonds: InternationalBondYield[];
+    updated_at: string;
+    data_delay: string;
+}
+
+interface BondHistoryPoint {
+    date: string;
+    timestamp: number;
+    yield_rate: number;
+}
+
+interface BondHistory {
+    country: string;
+    country_code: string;
+    points: BondHistoryPoint[];
+    data_delay: string;
+}
+
+interface Commodity {
+    symbol: string;
+    name: string;
+    category: string;
+    price: number;
+    change: number;
+    change_percent: number;
+    day_high: number;
+    day_low: number;
+    volume: number;
+    prev_close: number;
+    unit: string;
+}
+
+interface CommoditiesResponse {
+    commodities: Commodity[];
+    updated_at: string;
+}
+
 declare const LightweightCharts: typeof import('lightweight-charts');
 
 class FinTerminal {
@@ -220,10 +268,18 @@ class FinTerminal {
     private statementsModal: HTMLElement;
     private govtModal: HTMLElement;
     private treasuryChartModal: HTMLElement;
+    private bondsModal: HTMLElement;
+    private bondsChartModal: HTMLElement;
+    private commoditiesModal: HTMLElement;
     private treasuryChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
     private treasuryLineSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addLineSeries']> | null = null;
+    private bondsChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
+    private bondsLineSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addLineSeries']> | null = null;
     private currentTreasuryMaturity: string | null = null;
     private currentTreasuryDays: number = 365;
+    private currentBondCountry: string | null = null;
+    private currentBondCountryCode: string | null = null;
+    private currentBondYears: number = 10;
     private statementsData: FinancialStatements | null = null;
     private currentTab: 'income' | 'balance' | 'cashflow' = 'income';
     private currentSymbol: string | null = null;
@@ -247,6 +303,9 @@ class FinTerminal {
         this.statementsModal = document.getElementById('statements-modal') as HTMLElement;
         this.govtModal = document.getElementById('govt-modal') as HTMLElement;
         this.treasuryChartModal = document.getElementById('treasury-chart-modal') as HTMLElement;
+        this.bondsModal = document.getElementById('bonds-modal') as HTMLElement;
+        this.bondsChartModal = document.getElementById('bonds-chart-modal') as HTMLElement;
+        this.commoditiesModal = document.getElementById('commodities-modal') as HTMLElement;
 
         this.init();
     }
@@ -259,6 +318,9 @@ class FinTerminal {
         this.setupStatementsModal();
         this.setupGovtModal();
         this.setupTreasuryChartModal();
+        this.setupBondsModal();
+        this.setupBondsChartModal();
+        this.setupCommoditiesModal();
         this.updateTime();
         this.loadQuickTickers();
         setInterval(() => this.updateTime(), 1000);
@@ -879,6 +941,335 @@ class FinTerminal {
             }
         });
         resizeObserver.observe(chartContainer);
+    }
+
+    private setupBondsModal(): void {
+        const bondsBtn = document.querySelector('[data-fn="INTL"]');
+        const closeBtn = document.getElementById('bonds-modal-close');
+        const overlay = this.bondsModal.querySelector('.modal-overlay');
+
+        bondsBtn?.addEventListener('click', () => this.openBondsModal());
+        closeBtn?.addEventListener('click', () => this.closeBondsModal());
+        overlay?.addEventListener('click', () => this.closeBondsModal());
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !this.bondsModal.classList.contains('hidden')) {
+                this.closeBondsModal();
+            }
+        });
+    }
+
+    private async openBondsModal(): Promise<void> {
+        const loadingEl = document.getElementById('bonds-loading');
+        const bodyEl = document.getElementById('bonds-body');
+        const dateEl = document.getElementById('bonds-date');
+
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (bodyEl) bodyEl.innerHTML = '';
+
+        this.bondsModal.classList.remove('hidden');
+
+        try {
+            const response = await fetch('/api/bonds');
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data: InternationalBonds = await response.json();
+            if (dateEl) dateEl.textContent = `Updated: ${new Date(data.updated_at).toLocaleString()}`;
+            this.renderBonds(data);
+        } catch {
+            if (bodyEl) bodyEl.innerHTML = '<div class="ratios-loading">Failed to load bond yields</div>';
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    }
+
+    private closeBondsModal(): void {
+        this.bondsModal.classList.add('hidden');
+    }
+
+    private renderBonds(data: InternationalBonds): void {
+        const bodyEl = document.getElementById('bonds-body');
+        if (!bodyEl) return;
+
+        const noHistoryCountries = ['CN'];
+
+        const renderBondRow = (bond: InternationalBondYield): string => {
+            const changeClass = bond.change >= 0 ? 'positive' : 'negative';
+            const sign = bond.change >= 0 ? '+' : '';
+            const freqClass = bond.data_frequency === 'daily' ? 'freq-daily' : 'freq-monthly';
+            const hasHistory = !noHistoryCountries.includes(bond.country_code);
+            const clickableClass = hasHistory ? 'clickable' : '';
+            const titleAttr = hasHistory ? '' : 'title="Historical chart not available"';
+            return `
+                <div class="bonds-row ${clickableClass}" data-country="${bond.country}" data-country-code="${bond.country_code}" ${titleAttr}>
+                    <div class="bonds-info">
+                        <span class="bonds-country">${bond.country}<span class="bonds-freq ${freqClass}" title="${bond.data_frequency} data"></span></span>
+                        <span class="bonds-code">${bond.country_code}</span>
+                    </div>
+                    <div class="bonds-data">
+                        <span class="bonds-yield">${bond.yield_10y.toFixed(2)}%</span>
+                        <span class="bonds-change ${changeClass}">${sign}${bond.change.toFixed(2)}</span>
+                        <span class="bonds-pct ${changeClass}">${sign}${bond.change_percent.toFixed(2)}%</span>
+                    </div>
+                </div>
+            `;
+        };
+
+        let html = `
+            <div class="bonds-section">
+                <div class="bonds-header">
+                    <span>Country</span>
+                    <span>10Y Yield</span>
+                    <span>Chg</span>
+                    <span>Chg %</span>
+                </div>
+                ${data.bonds.map(renderBondRow).join('')}
+            </div>
+            <div class="bonds-legend">
+                <span class="bonds-freq freq-daily"></span> Daily
+                <span class="bonds-freq freq-monthly" style="margin-left: 8px;"></span> Monthly
+            </div>
+        `;
+
+        bodyEl.innerHTML = html;
+
+        bodyEl.querySelectorAll('.bonds-row.clickable').forEach((row) => {
+            row.addEventListener('click', () => {
+                const country = (row as HTMLElement).dataset.country;
+                const countryCode = (row as HTMLElement).dataset.countryCode;
+                if (country && countryCode) {
+                    this.openBondsChartModal(country, countryCode);
+                }
+            });
+        });
+    }
+
+    private setupBondsChartModal(): void {
+        const closeBtn = document.getElementById('bonds-chart-modal-close');
+        const overlay = this.bondsChartModal.querySelector('.modal-overlay');
+
+        closeBtn?.addEventListener('click', () => this.closeBondsChartModal());
+        overlay?.addEventListener('click', () => this.closeBondsChartModal());
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !this.bondsChartModal.classList.contains('hidden')) {
+                this.closeBondsChartModal();
+            }
+        });
+
+        this.bondsChartModal.querySelectorAll('.bonds-range-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const years = parseInt(target.dataset.years || '10', 10);
+                this.bondsChartModal.querySelectorAll('.bonds-range-btn').forEach((b) => b.classList.remove('active'));
+                target.classList.add('active');
+                this.currentBondYears = years;
+                if (this.currentBondCountryCode) {
+                    this.loadBondHistory(this.currentBondCountryCode, years);
+                }
+            });
+        });
+    }
+
+    private async openBondsChartModal(country: string, countryCode: string): Promise<void> {
+        this.currentBondCountry = country;
+        this.currentBondCountryCode = countryCode;
+        this.currentBondYears = 10;
+
+        const titleEl = document.getElementById('bonds-chart-title');
+        const loadingEl = document.getElementById('bonds-chart-loading');
+        const chartContainer = document.getElementById('bonds-chart-container');
+
+        if (titleEl) titleEl.textContent = `${country} 10 Year Bond Yield History`;
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (chartContainer) chartContainer.innerHTML = '';
+
+        this.bondsChartModal.querySelectorAll('.bonds-range-btn').forEach((btn) => {
+            btn.classList.toggle('active', btn.getAttribute('data-years') === '10');
+        });
+
+        this.bondsChartModal.classList.remove('hidden');
+        await this.loadBondHistory(countryCode, 10);
+    }
+
+    private closeBondsChartModal(): void {
+        this.bondsChartModal.classList.add('hidden');
+        if (this.bondsChart) {
+            this.bondsChart.remove();
+            this.bondsChart = null;
+            this.bondsLineSeries = null;
+        }
+        this.currentBondCountry = null;
+        this.currentBondCountryCode = null;
+    }
+
+    private async loadBondHistory(countryCode: string, years: number): Promise<void> {
+        const loadingEl = document.getElementById('bonds-chart-loading');
+        const chartContainer = document.getElementById('bonds-chart-container');
+        const noticeEl = document.getElementById('bonds-chart-notice');
+
+        if (loadingEl) loadingEl.style.display = 'block';
+
+        try {
+            const response = await fetch(`/api/bonds/history/${countryCode}?years=${years}`);
+            if (!response.ok) throw new Error('Failed to fetch bond history');
+            const data: BondHistory = await response.json();
+            if (noticeEl) noticeEl.textContent = data.data_delay;
+            this.renderBondsChart(data);
+        } catch (error) {
+            if (chartContainer) {
+                chartContainer.innerHTML = '<div class="ratios-loading">Failed to load bond history</div>';
+            }
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    }
+
+    private renderBondsChart(data: BondHistory): void {
+        const chartContainer = document.getElementById('bonds-chart-container');
+        if (!chartContainer) return;
+
+        if (this.bondsChart) {
+            this.bondsChart.remove();
+            this.bondsChart = null;
+            this.bondsLineSeries = null;
+        }
+
+        chartContainer.innerHTML = '';
+
+        if (data.points.length === 0) {
+            chartContainer.innerHTML = '<div class="ratios-loading">No historical data available</div>';
+            return;
+        }
+
+        this.bondsChart = LightweightCharts.createChart(chartContainer, {
+            width: chartContainer.clientWidth,
+            height: 400,
+            layout: {
+                background: { color: '#1a1a1a' },
+                textColor: '#ff9900',
+            },
+            grid: {
+                vertLines: { color: 'rgba(255, 153, 0, 0.1)' },
+                horzLines: { color: 'rgba(255, 153, 0, 0.1)' },
+            },
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+            },
+            rightPriceScale: {
+                borderColor: 'rgba(255, 153, 0, 0.3)',
+            },
+            timeScale: {
+                borderColor: 'rgba(255, 153, 0, 0.3)',
+                timeVisible: true,
+                secondsVisible: false,
+            },
+        });
+
+        this.bondsLineSeries = this.bondsChart.addLineSeries({
+            color: '#ff9900',
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+            priceFormat: {
+                type: 'price',
+                precision: 2,
+                minMove: 0.01,
+            },
+        });
+
+        const chartData = data.points.map((point) => ({
+            time: point.date as import('lightweight-charts').Time,
+            value: point.yield_rate,
+        }));
+
+        this.bondsLineSeries.setData(chartData);
+        this.bondsChart.timeScale().fitContent();
+
+        const resizeObserver = new ResizeObserver(() => {
+            if (this.bondsChart && chartContainer) {
+                this.bondsChart.applyOptions({ width: chartContainer.clientWidth });
+            }
+        });
+        resizeObserver.observe(chartContainer);
+    }
+
+    private setupCommoditiesModal(): void {
+        const cmdtyBtn = document.querySelector('[data-fn="CMDTY"]');
+        const closeBtn = document.getElementById('commodities-modal-close');
+        const overlay = this.commoditiesModal?.querySelector('.modal-overlay');
+
+        cmdtyBtn?.addEventListener('click', () => this.openCommoditiesModal());
+        closeBtn?.addEventListener('click', () => this.closeCommoditiesModal());
+        overlay?.addEventListener('click', () => this.closeCommoditiesModal());
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !this.commoditiesModal?.classList.contains('hidden')) {
+                this.closeCommoditiesModal();
+            }
+        });
+    }
+
+    private async openCommoditiesModal(): Promise<void> {
+        const loadingEl = document.getElementById('commodities-loading');
+        const bodyEl = document.getElementById('commodities-body');
+
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (bodyEl) bodyEl.innerHTML = '';
+
+        this.commoditiesModal.classList.remove('hidden');
+
+        try {
+            const response = await fetch('/api/commodities');
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data: CommoditiesResponse = await response.json();
+            this.renderCommodities(data);
+        } catch {
+            if (bodyEl) bodyEl.innerHTML = '<div class="ratios-loading">Failed to load commodities</div>';
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    }
+
+    private closeCommoditiesModal(): void {
+        this.commoditiesModal.classList.add('hidden');
+    }
+
+    private renderCommodities(data: CommoditiesResponse): void {
+        const bodyEl = document.getElementById('commodities-body');
+        if (!bodyEl) return;
+
+        const categories = [...new Set(data.commodities.map(c => c.category))];
+
+        const renderCommodityRow = (commodity: Commodity): string => {
+            const changeClass = commodity.change >= 0 ? 'positive' : 'negative';
+            const sign = commodity.change >= 0 ? '+' : '';
+            return `
+                <div class="commodity-row">
+                    <div class="commodity-info">
+                        <span class="commodity-name">${commodity.name}</span>
+                        <span class="commodity-unit">${commodity.unit}</span>
+                    </div>
+                    <div class="commodity-data">
+                        <span class="commodity-price">${commodity.price.toFixed(2)}</span>
+                        <span class="commodity-change ${changeClass}">${sign}${commodity.change.toFixed(2)}</span>
+                        <span class="commodity-pct ${changeClass}">${sign}${commodity.change_percent.toFixed(2)}%</span>
+                    </div>
+                </div>
+            `;
+        };
+
+        let html = '';
+        for (const category of categories) {
+            const categoryItems = data.commodities.filter(c => c.category === category);
+            html += `
+                <div class="commodity-section">
+                    <div class="commodity-category">${category}</div>
+                    ${categoryItems.map(renderCommodityRow).join('')}
+                </div>
+            `;
+        }
+
+        bodyEl.innerHTML = html;
     }
 
     private async openStatementsModal(): Promise<void> {

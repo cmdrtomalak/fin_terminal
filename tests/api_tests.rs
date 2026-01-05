@@ -10,21 +10,26 @@ use axum::{routing::get, Router};
 use axum_test::TestServer;
 use std::sync::Arc;
 
+use fin_terminal::clients::bonds::BondsClient;
+use fin_terminal::clients::commodities::CommoditiesClient;
 use fin_terminal::clients::treasury::TreasuryClient;
 use fin_terminal::clients::yahoo::YahooClient;
 use fin_terminal::handlers::{
-    get_chart_data, get_financials, get_indices, get_news, get_quote, get_statements, get_treasury,
-    get_treasury_history, search_companies, AppState, Clients,
+    get_bond_history, get_chart_data, get_financials, get_indices, get_international_bonds,
+    get_news, get_quote, get_statements, get_treasury, get_treasury_history, search_companies,
+    AppState, Clients,
 };
 use fin_terminal::models::{
-    ChartData, Company, FinancialRatios, FinancialStatements, IndexQuote, NewsResponse, Quote,
-    TreasuryHistory, TreasuryRates,
+    BondHistory, ChartData, Company, FinancialRatios, FinancialStatements, IndexQuote,
+    InternationalBonds, NewsResponse, Quote, TreasuryHistory, TreasuryRates,
 };
 
 fn create_test_app() -> Router {
     let clients: AppState = Arc::new(Clients {
         yahoo: YahooClient::new(),
         treasury: TreasuryClient::new(),
+        bonds: BondsClient::new(),
+        commodities: CommoditiesClient::new(),
     });
 
     Router::new()
@@ -37,6 +42,8 @@ fn create_test_app() -> Router {
         .route("/api/indices", get(get_indices))
         .route("/api/treasury", get(get_treasury))
         .route("/api/treasury/history/:maturity", get(get_treasury_history))
+        .route("/api/bonds", get(get_international_bonds))
+        .route("/api/bonds/history/:country_code", get(get_bond_history))
         .with_state(clients)
 }
 
@@ -861,5 +868,143 @@ async fn test_nonexistent_endpoint_returns_404() {
         response.status_code(),
         404,
         "Unknown endpoint should return 404"
+    );
+}
+
+#[tokio::test]
+async fn test_bonds_returns_data() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/bonds").await;
+
+    response.assert_status_ok();
+
+    let bonds: InternationalBonds = response.json();
+    assert!(!bonds.bonds.is_empty(), "Should have bond yields");
+    assert!(
+        !bonds.updated_at.is_empty(),
+        "Should have updated_at timestamp"
+    );
+    assert!(
+        !bonds.data_delay.is_empty(),
+        "Should have data_delay notice"
+    );
+}
+
+#[tokio::test]
+async fn test_bonds_contains_g7_countries() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/bonds").await;
+
+    response.assert_status_ok();
+
+    let bonds: InternationalBonds = response.json();
+
+    let country_codes: Vec<&str> = bonds
+        .bonds
+        .iter()
+        .map(|b| b.country_code.as_str())
+        .collect();
+
+    assert!(
+        country_codes.contains(&"US"),
+        "Should include United States"
+    );
+    assert!(
+        country_codes.contains(&"GB"),
+        "Should include United Kingdom"
+    );
+    assert!(country_codes.contains(&"DE"), "Should include Germany");
+    assert!(country_codes.contains(&"JP"), "Should include Japan");
+}
+
+#[tokio::test]
+async fn test_bonds_have_valid_structure() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/bonds").await;
+
+    response.assert_status_ok();
+
+    let bonds: InternationalBonds = response.json();
+
+    for bond in &bonds.bonds {
+        assert!(!bond.country.is_empty(), "Bond should have country name");
+        assert!(
+            !bond.country_code.is_empty(),
+            "Bond should have country code"
+        );
+        assert!(
+            bond.yield_10y > 0.0,
+            "Yield should be positive: {} = {}",
+            bond.country,
+            bond.yield_10y
+        );
+        assert!(!bond.date.is_empty(), "Bond should have date");
+    }
+}
+
+#[tokio::test]
+async fn test_bond_history_returns_data() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/bonds/history/US").await;
+
+    response.assert_status_ok();
+
+    let history: BondHistory = response.json();
+    assert_eq!(history.country_code, "US");
+    assert!(!history.country.is_empty(), "Should have country name");
+    assert!(!history.points.is_empty(), "Should have history points");
+    assert!(
+        !history.data_delay.is_empty(),
+        "Should have data_delay notice"
+    );
+}
+
+#[tokio::test]
+async fn test_bond_history_with_years_param() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server
+        .get("/api/bonds/history/DE")
+        .add_query_param("years", "5")
+        .await;
+
+    response.assert_status_ok();
+
+    let history: BondHistory = response.json();
+    assert_eq!(history.country_code, "DE");
+    assert!(!history.points.is_empty(), "Should have history points");
+}
+
+#[tokio::test]
+async fn test_bond_history_points_have_valid_structure() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/bonds/history/GB").await;
+
+    response.assert_status_ok();
+
+    let history: BondHistory = response.json();
+
+    for point in &history.points {
+        assert!(!point.date.is_empty(), "Point should have a date");
+        assert!(point.timestamp > 0, "Point should have a valid timestamp");
+    }
+}
+
+#[tokio::test]
+async fn test_bond_history_returns_error_for_invalid_country() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/bonds/history/XX").await;
+
+    let status = response.status_code();
+    assert!(
+        status == 500,
+        "Invalid country code should return 500 (unknown country), got {}",
+        status
     );
 }

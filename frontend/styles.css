@@ -1162,3 +1162,319 @@ body {
     height: 400px;
     margin-top: 15px;
 }
+
+/* International Bonds Modal */
+.bonds-modal-content {
+    max-width: 700px;
+}
+
+.bonds-body {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.bonds-data-notice {
+    font-size: 10px;
+    color: var(--bb-gray);
+    margin-bottom: 12px;
+    padding: 6px 10px;
+    background: rgba(255, 153, 0, 0.1);
+    border-left: 2px solid var(--bb-amber);
+}
+
+.bonds-section {
+    margin-bottom: 20px;
+}
+
+.bonds-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--bb-border);
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--bb-gray);
+    margin-bottom: 4px;
+}
+
+.bonds-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--bb-border);
+}
+
+.bonds-row:last-child {
+    border-bottom: none;
+}
+
+.bonds-row.clickable {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.bonds-row.clickable:hover {
+    background: rgba(255, 153, 0, 0.1);
+}
+
+.bonds-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+}
+
+.bonds-country {
+    font-size: 12px;
+    color: var(--bb-amber);
+    font-weight: bold;
+}
+
+.bonds-code {
+    font-size: 10px;
+    color: var(--bb-gray);
+}
+
+.bonds-data {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    text-align: right;
+}
+
+.bonds-yield {
+    font-size: 14px;
+    color: var(--bb-white);
+    font-weight: bold;
+    min-width: 80px;
+    text-align: right;
+}
+
+.bonds-change {
+    font-size: 12px;
+    min-width: 70px;
+    text-align: right;
+}
+
+.bonds-pct {
+    font-size: 12px;
+    min-width: 70px;
+    text-align: right;
+    font-weight: bold;
+}
+
+.bonds-change.positive,
+.bonds-pct.positive {
+    color: var(--bb-green);
+}
+
+.bonds-change.negative,
+.bonds-pct.negative {
+    color: var(--bb-red);
+}
+
+.bonds-freq {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.bonds-freq.freq-daily {
+    background: var(--bb-green);
+}
+
+.bonds-freq.freq-monthly {
+    background: var(--bb-amber);
+}
+
+.bonds-legend {
+    font-size: 10px;
+    color: var(--bb-gray);
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--bb-border);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.bonds-legend .bonds-freq {
+    margin-left: 0;
+}
+
+/* Bonds Chart Modal */
+.bonds-chart-modal-content {
+    max-width: 900px;
+}
+
+.bonds-chart-controls {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.bonds-range-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    background: transparent;
+    color: var(--bb-gray);
+    border: 1px solid var(--bb-border);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.bonds-range-btn:hover {
+    color: var(--bb-orange);
+    border-color: var(--bb-orange);
+}
+
+.bonds-range-btn.active {
+    background: var(--bb-orange);
+    color: var(--bb-black);
+    border-color: var(--bb-orange);
+}
+
+#bonds-chart-container {
+    height: 400px;
+    margin-top: 15px;
+}
+
+@media (max-width: 600px) {
+    .bonds-row {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    
+    .bonds-data {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+    }
+    
+    .bonds-yield,
+    .bonds-change,
+    .bonds-pct {
+        min-width: auto;
+    }
+}
+
+/* Commodities Modal */
+.commodities-modal-content {
+    max-width: 650px;
+}
+
+.commodities-body {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.commodity-section {
+    margin-bottom: 20px;
+}
+
+.commodity-section:last-child {
+    margin-bottom: 0;
+}
+
+.commodity-category {
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--bb-blue);
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--bb-border);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.commodity-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--bb-border);
+}
+
+.commodity-row:last-child {
+    border-bottom: none;
+}
+
+.commodity-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+}
+
+.commodity-name {
+    font-size: 12px;
+    color: var(--bb-amber);
+    font-weight: bold;
+}
+
+.commodity-unit {
+    font-size: 10px;
+    color: var(--bb-gray);
+}
+
+.commodity-data {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    text-align: right;
+}
+
+.commodity-price {
+    font-size: 14px;
+    color: var(--bb-white);
+    font-weight: bold;
+    min-width: 90px;
+    text-align: right;
+}
+
+.commodity-change {
+    font-size: 12px;
+    min-width: 70px;
+    text-align: right;
+}
+
+.commodity-pct {
+    font-size: 12px;
+    min-width: 70px;
+    text-align: right;
+    font-weight: bold;
+}
+
+.commodity-change.positive,
+.commodity-pct.positive {
+    color: var(--bb-green);
+}
+
+.commodity-change.negative,
+.commodity-pct.negative {
+    color: var(--bb-red);
+}
+
+@media (max-width: 600px) {
+    .commodity-row {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    
+    .commodity-data {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+    }
+    
+    .commodity-price,
+    .commodity-change,
+    .commodity-pct {
+        min-width: auto;
+    }
+}
