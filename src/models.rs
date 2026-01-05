@@ -184,3 +184,32 @@ pub struct CashFlow {
     pub debt_repayment: Option<f64>,
     pub free_cash_flow: Option<f64>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TreasuryRate {
+    pub maturity: String,
+    pub yield_rate: f64,
+    pub change: f64,
+    pub change_percent: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TreasuryRates {
+    pub date: String,
+    pub previous_date: String,
+    pub rates: Vec<TreasuryRate>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TreasuryHistoryPoint {
+    pub date: String,
+    pub timestamp: i64,
+    pub yield_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TreasuryHistory {
+    pub maturity: String,
+    pub points: Vec<TreasuryHistoryPoint>,
+}

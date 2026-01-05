@@ -1,4 +1,7 @@
-use crate::models::{BalanceSheet, CashFlow, ChartData, ChartPoint, Company, FinancialRatios, FinancialStatements, IncomeStatement, IndexQuote, NewsItem, NewsResponse, Quote};
+use crate::models::{
+    BalanceSheet, CashFlow, ChartData, ChartPoint, Company, FinancialRatios, FinancialStatements,
+    IncomeStatement, IndexQuote, NewsItem, NewsResponse, Quote,
+};
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -220,7 +223,8 @@ impl YahooClient {
 
         self.client.get("https://fc.yahoo.com").send().await?;
 
-        let crumb_response = self.client
+        let crumb_response = self
+            .client
             .get("https://query2.finance.yahoo.com/v1/test/getcrumb")
             .send()
             .await?;
@@ -253,9 +257,7 @@ impl YahooClient {
             .quotes
             .unwrap_or_default()
             .into_iter()
-            .filter(|q| {
-                matches!(q.quote_type.as_deref(), Some("EQUITY") | Some("ETF"))
-            })
+            .filter(|q| matches!(q.quote_type.as_deref(), Some("EQUITY") | Some("ETF")))
             .map(|q| Company {
                 symbol: q.symbol,
                 name: q.long_name.or(q.short_name).unwrap_or_default(),
@@ -285,7 +287,8 @@ impl YahooClient {
             .and_then(|results| results.into_iter().next())
             .map(|r| {
                 let meta = r.meta;
-                let prev_close = meta.chart_previous_close
+                let prev_close = meta
+                    .chart_previous_close
                     .or(meta.previous_close)
                     .unwrap_or(0.0);
                 let price = meta.regular_market_price.unwrap_or(0.0);
@@ -296,7 +299,10 @@ impl YahooClient {
                     0.0
                 };
 
-                let (open, high, low, volume) = r.indicators.quote.first()
+                let (open, high, low, volume) = r
+                    .indicators
+                    .quote
+                    .first()
                     .map(|q| {
                         let opens = q.open.as_ref();
                         let highs = q.high.as_ref();
@@ -317,7 +323,11 @@ impl YahooClient {
                     price,
                     change,
                     change_percent,
-                    open: if open > 0.0 { open } else { meta.regular_market_day_low.unwrap_or(0.0) },
+                    open: if open > 0.0 {
+                        open
+                    } else {
+                        meta.regular_market_day_low.unwrap_or(0.0)
+                    },
                     high: meta.regular_market_day_high.unwrap_or(high),
                     low: meta.regular_market_day_low.unwrap_or(low),
                     volume: meta.regular_market_volume.unwrap_or(volume),
@@ -397,7 +407,10 @@ impl YahooClient {
         })
     }
 
-    pub async fn get_financials(&self, symbol: &str) -> Result<Option<FinancialRatios>, reqwest::Error> {
+    pub async fn get_financials(
+        &self,
+        symbol: &str,
+    ) -> Result<Option<FinancialRatios>, reqwest::Error> {
         let crumb = self.get_crumb().await?;
         let modules = "defaultKeyStatistics,financialData,summaryDetail";
         let url = format!(
@@ -408,7 +421,7 @@ impl YahooClient {
         );
 
         let response = self.client.get(&url).send().await?;
-        
+
         if !response.status().is_success() {
             self.invalidate_crumb().await;
             return Ok(None);
@@ -478,7 +491,10 @@ impl YahooClient {
                 FinancialRatios {
                     symbol: symbol.to_string(),
                     pe_ratio: summary.trailing_pe.and_then(|v| v.raw),
-                    forward_pe: summary.forward_pe.and_then(|v| v.raw).or(stats.forward_pe.and_then(|v| v.raw)),
+                    forward_pe: summary
+                        .forward_pe
+                        .and_then(|v| v.raw)
+                        .or(stats.forward_pe.and_then(|v| v.raw)),
                     peg_ratio: stats.peg_ratio.and_then(|v| v.raw),
                     price_to_book: stats.price_to_book.and_then(|v| v.raw),
                     price_to_sales: summary.price_to_sales_trailing12_months.and_then(|v| v.raw),
@@ -559,13 +575,13 @@ impl YahooClient {
             let symbol = symbol.to_string();
             let name = name.to_string();
             let region = region.to_string();
-            
+
             futures.push(async move {
                 let url = format!(
                     "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=2d",
                     urlencoding::encode(&symbol)
                 );
-                
+
                 let response = client.get(&url).send().await;
                 match response {
                     Ok(resp) => {
@@ -575,7 +591,8 @@ impl YahooClient {
                                 if let Some(results) = chart.chart.result {
                                     if let Some(result) = results.into_iter().next() {
                                         let meta = result.meta;
-                                        let prev_close = meta.chart_previous_close
+                                        let prev_close = meta
+                                            .chart_previous_close
                                             .or(meta.previous_close)
                                             .unwrap_or(0.0);
                                         let price = meta.regular_market_price.unwrap_or(0.0);
@@ -585,7 +602,7 @@ impl YahooClient {
                                         } else {
                                             0.0
                                         };
-                                        
+
                                         return Some(IndexQuote {
                                             symbol,
                                             name,
@@ -608,7 +625,7 @@ impl YahooClient {
 
         let results = futures::future::join_all(futures).await;
         let mut indices_result: Vec<IndexQuote> = results.into_iter().flatten().collect();
-        
+
         let order: std::collections::HashMap<&str, usize> = indices
             .iter()
             .enumerate()
@@ -620,47 +637,84 @@ impl YahooClient {
         Ok(indices_result)
     }
 
-    pub async fn get_statements(&self, symbol: &str) -> Result<Option<FinancialStatements>, reqwest::Error> {
+    pub async fn get_statements(
+        &self,
+        symbol: &str,
+    ) -> Result<Option<FinancialStatements>, reqwest::Error> {
         tracing::info!("Fetching statements for {} via timeseries API", symbol);
-        
+
         let income_keys = [
-            "TotalRevenue", "CostOfRevenue", "GrossProfit", "ResearchAndDevelopment",
-            "SellingGeneralAndAdministration", "OperatingExpense", "OperatingIncome",
-            "InterestExpense", "PretaxIncome", "TaxProvision", "NetIncome", "EBIT", "EBITDA",
+            "TotalRevenue",
+            "CostOfRevenue",
+            "GrossProfit",
+            "ResearchAndDevelopment",
+            "SellingGeneralAndAdministration",
+            "OperatingExpense",
+            "OperatingIncome",
+            "InterestExpense",
+            "PretaxIncome",
+            "TaxProvision",
+            "NetIncome",
+            "EBIT",
+            "EBITDA",
         ];
-        
+
         let balance_keys = [
-            "TotalAssets", "CurrentAssets", "CashAndCashEquivalents", "OtherShortTermInvestments",
-            "AccountsReceivable", "Inventory", "TotalNonCurrentAssets", "NetPPE",
-            "Goodwill", "OtherIntangibleAssets", "TotalLiabilitiesNetMinorityInterest",
-            "CurrentLiabilities", "AccountsPayable", "CurrentDebt",
-            "TotalNonCurrentLiabilitiesNetMinorityInterest", "LongTermDebt",
-            "StockholdersEquity", "RetainedEarnings", "CommonStock",
+            "TotalAssets",
+            "CurrentAssets",
+            "CashAndCashEquivalents",
+            "OtherShortTermInvestments",
+            "AccountsReceivable",
+            "Inventory",
+            "TotalNonCurrentAssets",
+            "NetPPE",
+            "Goodwill",
+            "OtherIntangibleAssets",
+            "TotalLiabilitiesNetMinorityInterest",
+            "CurrentLiabilities",
+            "AccountsPayable",
+            "CurrentDebt",
+            "TotalNonCurrentLiabilitiesNetMinorityInterest",
+            "LongTermDebt",
+            "StockholdersEquity",
+            "RetainedEarnings",
+            "CommonStock",
         ];
-        
+
         let cashflow_keys = [
-            "OperatingCashFlow", "NetIncomeFromContinuingOperations", "DepreciationAndAmortization",
-            "ChangeInWorkingCapital", "InvestingCashFlow", "CapitalExpenditure",
-            "PurchaseOfInvestment", "FinancingCashFlow", "CashDividendsPaid",
-            "RepurchaseOfCapitalStock", "RepaymentOfDebt", "FreeCashFlow",
+            "OperatingCashFlow",
+            "NetIncomeFromContinuingOperations",
+            "DepreciationAndAmortization",
+            "ChangeInWorkingCapital",
+            "InvestingCashFlow",
+            "CapitalExpenditure",
+            "PurchaseOfInvestment",
+            "FinancingCashFlow",
+            "CashDividendsPaid",
+            "RepurchaseOfCapitalStock",
+            "RepaymentOfDebt",
+            "FreeCashFlow",
         ];
-        
-        let all_types: Vec<String> = income_keys.iter()
+
+        let all_types: Vec<String> = income_keys
+            .iter()
             .chain(balance_keys.iter())
             .chain(cashflow_keys.iter())
             .map(|k| format!("annual{}", k))
             .collect();
-        
+
         let types_param = all_types.join(",");
         // Use 10 years back and 1 year forward to capture all available data
         // Yahoo API returns max 4 years regardless of range
-        let start = chrono::Utc::now().checked_sub_signed(chrono::Duration::days(10 * 365))
+        let start = chrono::Utc::now()
+            .checked_sub_signed(chrono::Duration::days(10 * 365))
             .map(|d| d.timestamp())
             .unwrap_or(0);
-        let end = chrono::Utc::now().checked_add_signed(chrono::Duration::days(365))
+        let end = chrono::Utc::now()
+            .checked_add_signed(chrono::Duration::days(365))
             .map(|d| d.timestamp())
             .unwrap_or(chrono::Utc::now().timestamp());
-        
+
         let url = format!(
             "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{}?type={}&period1={}&period2={}&merge=false&padTimeSeries=true",
             urlencoding::encode(symbol),
@@ -671,7 +725,7 @@ impl YahooClient {
 
         let response = self.client.get(&url).send().await?;
         tracing::info!("Timeseries API response status: {}", response.status());
-        
+
         if !response.status().is_success() {
             tracing::error!("Timeseries API returned status: {}", response.status());
             return Ok(None);
@@ -679,11 +733,15 @@ impl YahooClient {
 
         let text = response.text().await?;
         tracing::info!("Response length: {} bytes", text.len());
-        
+
         let data: TimeseriesResponse = match serde_json::from_str(&text) {
             Ok(d) => d,
             Err(e) => {
-                tracing::error!("Timeseries JSON parse error: {}. Response: {}", e, &text[..text.len().min(500)]);
+                tracing::error!(
+                    "Timeseries JSON parse error: {}. Response: {}",
+                    e,
+                    &text[..text.len().min(500)]
+                );
                 return Ok(None);
             }
         };
@@ -693,12 +751,17 @@ impl YahooClient {
             None => return Ok(None),
         };
 
-        let mut data_by_type: std::collections::HashMap<String, Vec<(String, f64)>> = std::collections::HashMap::new();
-        
+        let mut data_by_type: std::collections::HashMap<String, Vec<(String, f64)>> =
+            std::collections::HashMap::new();
+
         for result in results {
             if let Some(type_fields) = result.meta.type_field {
                 for type_name in &type_fields {
-                    tracing::debug!("Processing type: {}, available keys: {:?}", type_name, result.data.keys().collect::<Vec<_>>());
+                    tracing::debug!(
+                        "Processing type: {}, available keys: {:?}",
+                        type_name,
+                        result.data.keys().collect::<Vec<_>>()
+                    );
                     if let Some(data_arr) = result.data.get(type_name) {
                         match serde_json::from_value::<Vec<TimeseriesDataPoint>>(data_arr.clone()) {
                             Ok(points) => {
@@ -727,7 +790,8 @@ impl YahooClient {
             }
         }
 
-        let mut fiscal_years: Vec<String> = data_by_type.values()
+        let mut fiscal_years: Vec<String> = data_by_type
+            .values()
             .flat_map(|v| v.iter().map(|(date, _)| date.clone()))
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
@@ -735,13 +799,17 @@ impl YahooClient {
         fiscal_years.sort();
         fiscal_years.reverse();
         let fiscal_years: Vec<String> = fiscal_years.into_iter().take(4).collect();
-        
+
         tracing::debug!("Fiscal years: {:?}", fiscal_years);
-        tracing::debug!("Data types collected: {:?}", data_by_type.keys().collect::<Vec<_>>());
+        tracing::debug!(
+            "Data types collected: {:?}",
+            data_by_type.keys().collect::<Vec<_>>()
+        );
 
         let get_value = |key: &str, date: &str| -> Option<f64> {
             let full_key = format!("annual{}", key);
-            let result = data_by_type.get(&full_key)
+            let result = data_by_type
+                .get(&full_key)
                 .and_then(|v| v.iter().find(|(d, _)| d == date).map(|(_, val)| *val));
             if result.is_none() {
                 tracing::trace!("No value for {} at {}", full_key, date);
@@ -749,7 +817,8 @@ impl YahooClient {
             result
         };
 
-        let income_statements: Vec<IncomeStatement> = fiscal_years.iter()
+        let income_statements: Vec<IncomeStatement> = fiscal_years
+            .iter()
             .map(|fy| IncomeStatement {
                 fiscal_year: fy.clone(),
                 total_revenue: get_value("TotalRevenue", fy),
@@ -768,7 +837,8 @@ impl YahooClient {
             })
             .collect();
 
-        let balance_sheets: Vec<BalanceSheet> = fiscal_years.iter()
+        let balance_sheets: Vec<BalanceSheet> = fiscal_years
+            .iter()
             .map(|fy| BalanceSheet {
                 fiscal_year: fy.clone(),
                 total_assets: get_value("TotalAssets", fy),
@@ -785,7 +855,10 @@ impl YahooClient {
                 total_current_liabilities: get_value("CurrentLiabilities", fy),
                 accounts_payable: get_value("AccountsPayable", fy),
                 short_term_debt: get_value("CurrentDebt", fy),
-                total_non_current_liabilities: get_value("TotalNonCurrentLiabilitiesNetMinorityInterest", fy),
+                total_non_current_liabilities: get_value(
+                    "TotalNonCurrentLiabilitiesNetMinorityInterest",
+                    fy,
+                ),
                 long_term_debt: get_value("LongTermDebt", fy),
                 total_stockholders_equity: get_value("StockholdersEquity", fy),
                 retained_earnings: get_value("RetainedEarnings", fy),
@@ -793,17 +866,16 @@ impl YahooClient {
             })
             .collect();
 
-        let cash_flows: Vec<CashFlow> = fiscal_years.iter()
+        let cash_flows: Vec<CashFlow> = fiscal_years
+            .iter()
             .map(|fy| {
                 let op_cf = get_value("OperatingCashFlow", fy);
                 let capex = get_value("CapitalExpenditure", fy);
-                let fcf = get_value("FreeCashFlow", fy).or_else(|| {
-                    match (op_cf, capex) {
-                        (Some(o), Some(c)) => Some(o + c),
-                        _ => None,
-                    }
+                let fcf = get_value("FreeCashFlow", fy).or_else(|| match (op_cf, capex) {
+                    (Some(o), Some(c)) => Some(o + c),
+                    _ => None,
                 });
-                
+
                 CashFlow {
                     fiscal_year: fy.clone(),
                     operating_cash_flow: op_cf,
@@ -837,8 +909,12 @@ pub fn generate_news(symbol: &str, company_name: &str) -> NewsResponse {
 
     let mut rng = rand::thread_rng();
     let now = Utc::now();
-    
-    let name = if company_name.is_empty() { symbol } else { company_name };
+
+    let name = if company_name.is_empty() {
+        symbol
+    } else {
+        company_name
+    };
 
     let articles = vec![
         (
@@ -923,7 +999,14 @@ pub fn generate_news(symbol: &str, company_name: &str) -> NewsResponse {
         ),
     ];
 
-    let sources = vec!["Bloomberg", "Reuters", "CNBC", "WSJ", "Financial Times", "MarketWatch"];
+    let sources = vec![
+        "Bloomberg",
+        "Reuters",
+        "CNBC",
+        "WSJ",
+        "Financial Times",
+        "MarketWatch",
+    ];
 
     let items: Vec<NewsItem> = (0..8)
         .map(|i| {

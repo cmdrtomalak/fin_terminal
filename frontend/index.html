@@ -174,6 +174,47 @@
         </div>
     </div>
 
+    <div id="govt-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content govt-modal-content">
+            <div class="modal-header">
+                <span class="modal-source">US TREASURY YIELDS</span>
+                <span id="govt-date" class="govt-date"></span>
+                <button id="govt-modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="govt-loading" class="ratios-loading">Loading treasury rates...</div>
+            <div id="govt-body" class="govt-body"></div>
+        </div>
+    </div>
+
+    <div id="treasury-chart-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content treasury-chart-modal-content">
+            <div class="modal-header">
+                <span id="treasury-chart-title" class="modal-source">10 YR TREASURY YIELD</span>
+                <div class="treasury-chart-controls">
+                    <button class="treasury-range-btn" data-days="1">1D</button>
+                    <button class="treasury-range-btn" data-days="5">5D</button>
+                    <button class="treasury-range-btn" data-days="7">1W</button>
+                    <button class="treasury-range-btn" data-days="30">1M</button>
+                    <button class="treasury-range-btn" data-days="90">3M</button>
+                    <button class="treasury-range-btn" data-days="180">6M</button>
+                    <button class="treasury-range-btn active" data-days="365">1Y</button>
+                    <button class="treasury-range-btn" data-days="1095">3Y</button>
+                    <button class="treasury-range-btn" data-days="1825">5Y</button>
+                    <button class="treasury-range-btn" data-days="2920">8Y</button>
+                    <button class="treasury-range-btn" data-days="3650">10Y</button>
+                    <button class="treasury-range-btn" data-days="5475">15Y</button>
+                    <button class="treasury-range-btn" data-days="7300">20Y</button>
+                    <button class="treasury-range-btn" data-days="10950">30Y</button>
+                </div>
+                <button id="treasury-chart-modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="treasury-chart-loading" class="ratios-loading">Loading yield history...</div>
+            <div id="treasury-chart-container"></div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

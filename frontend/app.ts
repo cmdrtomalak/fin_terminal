@@ -180,6 +180,31 @@ interface FinancialStatements {
     cash_flows: CashFlow[];
 }
 
+interface TreasuryRate {
+    maturity: string;
+    yield_rate: number;
+    change: number;
+    change_percent: number;
+}
+
+interface TreasuryRates {
+    date: string;
+    previous_date: string;
+    rates: TreasuryRate[];
+    updated_at: string;
+}
+
+interface TreasuryHistoryPoint {
+    date: string;
+    timestamp: number;
+    yield_rate: number;
+}
+
+interface TreasuryHistory {
+    maturity: string;
+    points: TreasuryHistoryPoint[];
+}
+
 declare const LightweightCharts: typeof import('lightweight-charts');
 
 class FinTerminal {
@@ -193,6 +218,12 @@ class FinTerminal {
     private ratiosModal: HTMLElement;
     private indexModal: HTMLElement;
     private statementsModal: HTMLElement;
+    private govtModal: HTMLElement;
+    private treasuryChartModal: HTMLElement;
+    private treasuryChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
+    private treasuryLineSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addLineSeries']> | null = null;
+    private currentTreasuryMaturity: string | null = null;
+    private currentTreasuryDays: number = 365;
     private statementsData: FinancialStatements | null = null;
     private currentTab: 'income' | 'balance' | 'cashflow' = 'income';
     private currentSymbol: string | null = null;
@@ -214,6 +245,8 @@ class FinTerminal {
         this.ratiosModal = document.getElementById('ratios-modal') as HTMLElement;
         this.indexModal = document.getElementById('index-modal') as HTMLElement;
         this.statementsModal = document.getElementById('statements-modal') as HTMLElement;
+        this.govtModal = document.getElementById('govt-modal') as HTMLElement;
+        this.treasuryChartModal = document.getElementById('treasury-chart-modal') as HTMLElement;
 
         this.init();
     }
@@ -224,6 +257,8 @@ class FinTerminal {
         this.setupRatiosModal();
         this.setupIndexModal();
         this.setupStatementsModal();
+        this.setupGovtModal();
+        this.setupTreasuryChartModal();
         this.updateTime();
         this.loadQuickTickers();
         setInterval(() => this.updateTime(), 1000);
@@ -564,6 +599,286 @@ class FinTerminal {
                 this.closeStatementsModal();
             }
         });
+    }
+
+    private setupGovtModal(): void {
+        const govtBtn = document.querySelector('[data-fn="GOVT"]');
+        const closeBtn = document.getElementById('govt-modal-close');
+        const overlay = this.govtModal.querySelector('.modal-overlay');
+
+        govtBtn?.addEventListener('click', () => this.openGovtModal());
+        closeBtn?.addEventListener('click', () => this.closeGovtModal());
+        overlay?.addEventListener('click', () => this.closeGovtModal());
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !this.govtModal.classList.contains('hidden')) {
+                this.closeGovtModal();
+            }
+        });
+    }
+
+    private async openGovtModal(): Promise<void> {
+        const loadingEl = document.getElementById('govt-loading');
+        const bodyEl = document.getElementById('govt-body');
+        const dateEl = document.getElementById('govt-date');
+
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (bodyEl) bodyEl.innerHTML = '';
+
+        this.govtModal.classList.remove('hidden');
+
+        try {
+            const response = await fetch('/api/treasury');
+            if (!response.ok) throw new Error('Failed to fetch');
+            const rates: TreasuryRates = await response.json();
+            if (dateEl) dateEl.textContent = `As of ${rates.date}`;
+            this.renderTreasury(rates);
+        } catch {
+            if (bodyEl) bodyEl.innerHTML = '<div class="ratios-loading">Failed to load treasury rates</div>';
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    }
+
+    private closeGovtModal(): void {
+        this.govtModal.classList.add('hidden');
+    }
+
+    private renderTreasury(data: TreasuryRates): void {
+        const bodyEl = document.getElementById('govt-body');
+        if (!bodyEl) return;
+
+        const shortTermRates = data.rates.filter(r => 
+            ['1 Mo', '1.5 Month', '2 Mo', '3 Mo', '4 Mo', '6 Mo'].includes(r.maturity)
+        );
+        const longTermRates = data.rates.filter(r => 
+            ['1 Yr', '2 Yr', '3 Yr', '5 Yr', '7 Yr', '10 Yr', '20 Yr', '30 Yr'].includes(r.maturity)
+        );
+
+        const renderRateRow = (rate: TreasuryRate): string => {
+            const changeClass = rate.change >= 0 ? 'positive' : 'negative';
+            const sign = rate.change >= 0 ? '+' : '';
+            return `
+                <div class="treasury-row">
+                    <span class="treasury-maturity">${rate.maturity}</span>
+                    <span class="treasury-yield">${rate.yield_rate.toFixed(2)}%</span>
+                    <span class="treasury-change ${changeClass}">${sign}${rate.change.toFixed(2)}</span>
+                    <span class="treasury-pct ${changeClass}">${sign}${rate.change_percent.toFixed(2)}%</span>
+                </div>
+            `;
+        };
+
+        let html = '';
+
+        if (shortTermRates.length > 0) {
+            html += `
+                <div class="treasury-section">
+                    <div class="treasury-section-title">SHORT-TERM (BILLS)</div>
+                    <div class="treasury-header">
+                        <span>Maturity</span>
+                        <span>Yield</span>
+                        <span>Chg</span>
+                        <span>Chg %</span>
+                    </div>
+                    ${shortTermRates.map(renderRateRow).join('')}
+                </div>
+            `;
+        }
+
+        if (longTermRates.length > 0) {
+            html += `
+                <div class="treasury-section">
+                    <div class="treasury-section-title">LONG-TERM (NOTES & BONDS)</div>
+                    <div class="treasury-header">
+                        <span>Maturity</span>
+                        <span>Yield</span>
+                        <span>Chg</span>
+                        <span>Chg %</span>
+                    </div>
+                    ${longTermRates.map(renderRateRow).join('')}
+                </div>
+            `;
+        }
+
+        const benchmark10yr = data.rates.find(r => r.maturity === '10 Yr');
+        const benchmark2yr = data.rates.find(r => r.maturity === '2 Yr');
+        if (benchmark10yr && benchmark2yr) {
+            const spread = benchmark10yr.yield_rate - benchmark2yr.yield_rate;
+            const spreadClass = spread >= 0 ? 'positive' : 'negative';
+            html += `
+                <div class="treasury-section">
+                    <div class="treasury-section-title">YIELD CURVE</div>
+                    <div class="treasury-row">
+                        <span class="treasury-maturity">10Y-2Y Spread</span>
+                        <span class="treasury-yield ${spreadClass}">${spread >= 0 ? '+' : ''}${(spread * 100).toFixed(0)} bps</span>
+                        <span class="treasury-change"></span>
+                        <span class="treasury-pct"></span>
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `<div class="treasury-updated">Last updated: ${new Date(data.updated_at).toLocaleString()}</div>`;
+
+        bodyEl.innerHTML = html;
+
+        bodyEl.querySelectorAll('.treasury-row').forEach((row) => {
+            const maturityEl = row.querySelector('.treasury-maturity');
+            if (maturityEl) {
+                const maturity = maturityEl.textContent;
+                if (maturity && !maturity.includes('Spread')) {
+                    row.classList.add('clickable');
+                    row.addEventListener('click', () => this.openTreasuryChartModal(maturity));
+                }
+            }
+        });
+    }
+
+    private setupTreasuryChartModal(): void {
+        const closeBtn = document.getElementById('treasury-chart-modal-close');
+        const overlay = this.treasuryChartModal.querySelector('.modal-overlay');
+
+        closeBtn?.addEventListener('click', () => this.closeTreasuryChartModal());
+        overlay?.addEventListener('click', () => this.closeTreasuryChartModal());
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !this.treasuryChartModal.classList.contains('hidden')) {
+                this.closeTreasuryChartModal();
+            }
+        });
+
+        this.treasuryChartModal.querySelectorAll('.treasury-range-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const days = parseInt(target.dataset.days || '365', 10);
+                this.treasuryChartModal.querySelectorAll('.treasury-range-btn').forEach((b) => b.classList.remove('active'));
+                target.classList.add('active');
+                this.currentTreasuryDays = days;
+                if (this.currentTreasuryMaturity) {
+                    this.loadTreasuryHistory(this.currentTreasuryMaturity, days);
+                }
+            });
+        });
+    }
+
+    private async openTreasuryChartModal(maturity: string): Promise<void> {
+        this.currentTreasuryMaturity = maturity;
+        this.currentTreasuryDays = 365;
+
+        const titleEl = document.getElementById('treasury-chart-title');
+        const loadingEl = document.getElementById('treasury-chart-loading');
+        const chartContainer = document.getElementById('treasury-chart-container');
+
+        if (titleEl) titleEl.textContent = `${maturity} Treasury Yield History`;
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (chartContainer) chartContainer.innerHTML = '';
+
+        this.treasuryChartModal.querySelectorAll('.treasury-range-btn').forEach((btn) => {
+            btn.classList.toggle('active', btn.getAttribute('data-days') === '365');
+        });
+
+        this.treasuryChartModal.classList.remove('hidden');
+        await this.loadTreasuryHistory(maturity, 365);
+    }
+
+    private closeTreasuryChartModal(): void {
+        this.treasuryChartModal.classList.add('hidden');
+        if (this.treasuryChart) {
+            this.treasuryChart.remove();
+            this.treasuryChart = null;
+            this.treasuryLineSeries = null;
+        }
+        this.currentTreasuryMaturity = null;
+    }
+
+    private async loadTreasuryHistory(maturity: string, days: number): Promise<void> {
+        const loadingEl = document.getElementById('treasury-chart-loading');
+        const chartContainer = document.getElementById('treasury-chart-container');
+
+        if (loadingEl) loadingEl.style.display = 'block';
+
+        try {
+            const encodedMaturity = encodeURIComponent(maturity);
+            const response = await fetch(`/api/treasury/history/${encodedMaturity}?days=${days}`);
+            if (!response.ok) throw new Error('Failed to fetch treasury history');
+            const data: TreasuryHistory = await response.json();
+            this.renderTreasuryChart(data);
+        } catch (error) {
+            if (chartContainer) {
+                chartContainer.innerHTML = '<div class="ratios-loading">Failed to load treasury history</div>';
+            }
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    }
+
+    private renderTreasuryChart(data: TreasuryHistory): void {
+        const chartContainer = document.getElementById('treasury-chart-container');
+        if (!chartContainer) return;
+
+        if (this.treasuryChart) {
+            this.treasuryChart.remove();
+            this.treasuryChart = null;
+            this.treasuryLineSeries = null;
+        }
+
+        chartContainer.innerHTML = '';
+
+        if (data.points.length === 0) {
+            chartContainer.innerHTML = '<div class="ratios-loading">No historical data available</div>';
+            return;
+        }
+
+        this.treasuryChart = LightweightCharts.createChart(chartContainer, {
+            width: chartContainer.clientWidth,
+            height: 400,
+            layout: {
+                background: { color: '#1a1a1a' },
+                textColor: '#ff9900',
+            },
+            grid: {
+                vertLines: { color: 'rgba(255, 153, 0, 0.1)' },
+                horzLines: { color: 'rgba(255, 153, 0, 0.1)' },
+            },
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+            },
+            rightPriceScale: {
+                borderColor: 'rgba(255, 153, 0, 0.3)',
+            },
+            timeScale: {
+                borderColor: 'rgba(255, 153, 0, 0.3)',
+                timeVisible: true,
+                secondsVisible: false,
+            },
+        });
+
+        this.treasuryLineSeries = this.treasuryChart.addLineSeries({
+            color: '#ff9900',
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+            priceFormat: {
+                type: 'price',
+                precision: 2,
+                minMove: 0.01,
+            },
+        });
+
+        const chartData = data.points.map((point) => ({
+            time: point.date as import('lightweight-charts').Time,
+            value: point.yield_rate,
+        }));
+
+        this.treasuryLineSeries.setData(chartData);
+        this.treasuryChart.timeScale().fitContent();
+
+        const resizeObserver = new ResizeObserver(() => {
+            if (this.treasuryChart && chartContainer) {
+                this.treasuryChart.applyOptions({ width: chartContainer.clientWidth });
+            }
+        });
+        resizeObserver.observe(chartContainer);
     }
 
     private async openStatementsModal(): Promise<void> {

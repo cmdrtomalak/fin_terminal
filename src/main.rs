@@ -1,6 +1,7 @@
 use axum::{routing::get, Router};
+use fin_terminal::clients::treasury::TreasuryClient;
 use fin_terminal::clients::yahoo::YahooClient;
-use fin_terminal::handlers::{self, AppState};
+use fin_terminal::handlers::{self, AppState, Clients};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
@@ -15,7 +16,10 @@ async fn main() {
         ))
         .init();
 
-    let client: AppState = Arc::new(YahooClient::new());
+    let clients: AppState = Arc::new(Clients {
+        yahoo: YahooClient::new(),
+        treasury: TreasuryClient::new(),
+    });
 
     let api_routes = Router::new()
         .route("/search", get(handlers::search_companies))
@@ -25,7 +29,12 @@ async fn main() {
         .route("/financials/:symbol", get(handlers::get_financials))
         .route("/statements/:symbol", get(handlers::get_statements))
         .route("/indices", get(handlers::get_indices))
-        .with_state(client);
+        .route("/treasury", get(handlers::get_treasury))
+        .route(
+            "/treasury/history/:maturity",
+            get(handlers::get_treasury_history),
+        )
+        .with_state(clients);
 
     let app = Router::new()
         .nest("/api", api_routes)

@@ -10,19 +10,22 @@ use axum::{routing::get, Router};
 use axum_test::TestServer;
 use std::sync::Arc;
 
-// Re-import from the main crate
+use fin_terminal::clients::treasury::TreasuryClient;
 use fin_terminal::clients::yahoo::YahooClient;
 use fin_terminal::handlers::{
-    get_chart_data, get_financials, get_indices, get_news, get_quote, get_statements,
-    search_companies, AppState,
+    get_chart_data, get_financials, get_indices, get_news, get_quote, get_statements, get_treasury,
+    get_treasury_history, search_companies, AppState, Clients,
 };
 use fin_terminal::models::{
     ChartData, Company, FinancialRatios, FinancialStatements, IndexQuote, NewsResponse, Quote,
+    TreasuryHistory, TreasuryRates,
 };
 
-/// Create the API router for testing
 fn create_test_app() -> Router {
-    let client: AppState = Arc::new(YahooClient::new());
+    let clients: AppState = Arc::new(Clients {
+        yahoo: YahooClient::new(),
+        treasury: TreasuryClient::new(),
+    });
 
     Router::new()
         .route("/api/search", get(search_companies))
@@ -32,7 +35,9 @@ fn create_test_app() -> Router {
         .route("/api/financials/:symbol", get(get_financials))
         .route("/api/statements/:symbol", get(get_statements))
         .route("/api/indices", get(get_indices))
-        .with_state(client)
+        .route("/api/treasury", get(get_treasury))
+        .route("/api/treasury/history/:maturity", get(get_treasury_history))
+        .with_state(clients)
 }
 
 // ============================================================================
@@ -43,12 +48,18 @@ fn create_test_app() -> Router {
 async fn test_search_returns_results_for_valid_query() {
     let server = TestServer::new(create_test_app()).unwrap();
 
-    let response = server.get("/api/search").add_query_param("q", "apple").await;
+    let response = server
+        .get("/api/search")
+        .add_query_param("q", "apple")
+        .await;
 
     response.assert_status_ok();
 
     let companies: Vec<Company> = response.json();
-    assert!(!companies.is_empty(), "Search for 'apple' should return results");
+    assert!(
+        !companies.is_empty(),
+        "Search for 'apple' should return results"
+    );
 
     // AAPL should be in the results
     let has_aapl = companies.iter().any(|c| c.symbol == "AAPL");
@@ -59,7 +70,10 @@ async fn test_search_returns_results_for_valid_query() {
 async fn test_search_returns_company_structure() {
     let server = TestServer::new(create_test_app()).unwrap();
 
-    let response = server.get("/api/search").add_query_param("q", "microsoft").await;
+    let response = server
+        .get("/api/search")
+        .add_query_param("q", "microsoft")
+        .await;
 
     response.assert_status_ok();
 
@@ -81,7 +95,10 @@ async fn test_search_with_symbol_query() {
     response.assert_status_ok();
 
     let companies: Vec<Company> = response.json();
-    assert!(!companies.is_empty(), "Search for 'NVDA' should return results");
+    assert!(
+        !companies.is_empty(),
+        "Search for 'NVDA' should return results"
+    );
 
     // NVDA should be in the results
     let has_nvda = companies.iter().any(|c| c.symbol == "NVDA");
@@ -136,7 +153,10 @@ async fn test_quote_contains_required_fields() {
     assert_eq!(quote.symbol, "MSFT");
     assert!(quote.price > 0.0, "Price should be positive");
     assert!(quote.high >= quote.low, "High should be >= low");
-    assert!(quote.week_52_high >= quote.week_52_low, "52-week high should be >= 52-week low");
+    assert!(
+        quote.week_52_high >= quote.week_52_low,
+        "52-week high should be >= 52-week low"
+    );
     assert!(!quote.timestamp.is_empty(), "Timestamp should be present");
 }
 
@@ -199,7 +219,10 @@ async fn test_chart_points_have_valid_structure() {
 
     // Verify structure of chart points
     for point in &chart.points {
-        assert!(point.timestamp > 0, "Timestamp should be positive Unix time");
+        assert!(
+            point.timestamp > 0,
+            "Timestamp should be positive Unix time"
+        );
         assert!(point.open > 0.0, "Open price should be positive");
         assert!(point.high > 0.0, "High price should be positive");
         assert!(point.low > 0.0, "Low price should be positive");
@@ -213,12 +236,18 @@ async fn test_chart_with_days_parameter() {
     let server = TestServer::new(create_test_app()).unwrap();
 
     // Test with explicit days parameter
-    let response = server.get("/api/chart/AAPL").add_query_param("days", "30").await;
+    let response = server
+        .get("/api/chart/AAPL")
+        .add_query_param("days", "30")
+        .await;
 
     response.assert_status_ok();
 
     let chart: ChartData = response.json();
-    assert!(!chart.points.is_empty(), "Chart with days=30 should have data");
+    assert!(
+        !chart.points.is_empty(),
+        "Chart with days=30 should have data"
+    );
 }
 
 #[tokio::test]
@@ -229,12 +258,19 @@ async fn test_chart_with_different_time_ranges() {
     let ranges = vec![("7", "1 week"), ("90", "3 months"), ("365", "1 year")];
 
     for (days, _description) in ranges {
-        let response = server.get("/api/chart/AAPL").add_query_param("days", days).await;
+        let response = server
+            .get("/api/chart/AAPL")
+            .add_query_param("days", days)
+            .await;
 
         response.assert_status_ok();
 
         let chart: ChartData = response.json();
-        assert!(!chart.points.is_empty(), "Chart for {} should have data", _description);
+        assert!(
+            !chart.points.is_empty(),
+            "Chart for {} should have data",
+            _description
+        );
     }
 }
 
@@ -272,7 +308,10 @@ async fn test_news_items_have_required_fields() {
         assert!(!item.title.is_empty(), "News item should have a title");
         assert!(!item.summary.is_empty(), "News item should have a summary");
         assert!(!item.source.is_empty(), "News item should have a source");
-        assert!(!item.timestamp.is_empty(), "News item should have a timestamp");
+        assert!(
+            !item.timestamp.is_empty(),
+            "News item should have a timestamp"
+        );
         assert!(!item.url.is_empty(), "News item should have a URL");
         assert!(
             ["positive", "negative", "neutral"].contains(&item.sentiment.as_str()),
@@ -459,8 +498,9 @@ async fn test_statements_income_statement_has_key_fields() {
     );
 
     // At least some key fields should be populated
-    let has_key_data =
-        latest.total_revenue.is_some() || latest.net_income.is_some() || latest.gross_profit.is_some();
+    let has_key_data = latest.total_revenue.is_some()
+        || latest.net_income.is_some()
+        || latest.gross_profit.is_some();
 
     assert!(
         has_key_data,
@@ -610,8 +650,133 @@ async fn test_indices_have_valid_structure() {
         assert!(!index.symbol.is_empty(), "Index should have a symbol");
         assert!(!index.name.is_empty(), "Index should have a name");
         assert!(!index.region.is_empty(), "Index should have a region");
-        assert!(index.price > 0.0, "Index price should be positive: {} = {}", index.symbol, index.price);
+        assert!(
+            index.price > 0.0,
+            "Index price should be positive: {} = {}",
+            index.symbol,
+            index.price
+        );
     }
+}
+
+#[tokio::test]
+async fn test_treasury_returns_data() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/treasury").await;
+
+    response.assert_status_ok();
+
+    let rates: TreasuryRates = response.json();
+    assert!(!rates.date.is_empty(), "Should have a date");
+    assert!(!rates.rates.is_empty(), "Should have treasury rates");
+}
+
+#[tokio::test]
+async fn test_treasury_contains_key_maturities() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/treasury").await;
+
+    response.assert_status_ok();
+
+    let rates: TreasuryRates = response.json();
+
+    let maturities: Vec<&str> = rates.rates.iter().map(|r| r.maturity.as_str()).collect();
+
+    assert!(
+        maturities.contains(&"10 Yr"),
+        "Should include 10 Year treasury"
+    );
+    assert!(
+        maturities.contains(&"2 Yr"),
+        "Should include 2 Year treasury"
+    );
+}
+
+#[tokio::test]
+async fn test_treasury_rates_have_valid_structure() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/treasury").await;
+
+    response.assert_status_ok();
+
+    let rates: TreasuryRates = response.json();
+
+    for rate in &rates.rates {
+        assert!(!rate.maturity.is_empty(), "Rate should have a maturity");
+        assert!(
+            rate.yield_rate > 0.0,
+            "Yield should be positive: {} = {}",
+            rate.maturity,
+            rate.yield_rate
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_treasury_history_returns_data() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/treasury/history/10%20Yr").await;
+
+    response.assert_status_ok();
+
+    let history: TreasuryHistory = response.json();
+    assert_eq!(history.maturity, "10 Yr");
+    assert!(!history.points.is_empty(), "Should have history points");
+}
+
+#[tokio::test]
+async fn test_treasury_history_with_days_param() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server
+        .get("/api/treasury/history/10%20Yr")
+        .add_query_param("days", "30")
+        .await;
+
+    response.assert_status_ok();
+
+    let history: TreasuryHistory = response.json();
+    assert_eq!(history.maturity, "10 Yr");
+}
+
+#[tokio::test]
+async fn test_treasury_history_points_have_valid_structure() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/treasury/history/2%20Yr").await;
+
+    response.assert_status_ok();
+
+    let history: TreasuryHistory = response.json();
+
+    for point in &history.points {
+        assert!(!point.date.is_empty(), "Point should have a date");
+        assert!(point.timestamp > 0, "Point should have a valid timestamp");
+        assert!(
+            point.yield_rate > 0.0,
+            "Point yield should be positive: {}",
+            point.yield_rate
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_treasury_history_returns_empty_for_invalid_maturity() {
+    let server = TestServer::new(create_test_app()).unwrap();
+
+    let response = server.get("/api/treasury/history/99%20Yr").await;
+
+    response.assert_status_ok();
+
+    let history: TreasuryHistory = response.json();
+    assert!(
+        history.points.is_empty(),
+        "Invalid maturity should return empty points"
+    );
 }
 
 // ============================================================================
@@ -648,7 +813,10 @@ async fn test_search_then_quote_workflow() {
     let server = TestServer::new(create_test_app()).unwrap();
 
     // Step 1: Search for a company
-    let search_response = server.get("/api/search").add_query_param("q", "tesla").await;
+    let search_response = server
+        .get("/api/search")
+        .add_query_param("q", "tesla")
+        .await;
 
     search_response.assert_status_ok();
 
@@ -677,7 +845,10 @@ async fn test_search_without_query_param_returns_error() {
 
     // Missing required query param should return 400
     let status = response.status_code();
-    assert_eq!(status, 400, "Missing 'q' param should return 400 Bad Request");
+    assert_eq!(
+        status, 400,
+        "Missing 'q' param should return 400 Bad Request"
+    );
 }
 
 #[tokio::test]
@@ -686,5 +857,9 @@ async fn test_nonexistent_endpoint_returns_404() {
 
     let response = server.get("/api/nonexistent").await;
 
-    assert_eq!(response.status_code(), 404, "Unknown endpoint should return 404");
+    assert_eq!(
+        response.status_code(),
+        404,
+        "Unknown endpoint should return 404"
+    );
 }
