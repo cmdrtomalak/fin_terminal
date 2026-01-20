@@ -272,7 +272,13 @@ class FinTerminal {
     private bondsChartModal: HTMLElement;
     private commoditiesModal: HTMLElement;
     private indexChartModal: HTMLElement;
+    private commodityChartModal: HTMLElement;
     private treasuryChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
+    private commodityChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
+    private commodityCandleSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addCandlestickSeries']> | null = null;
+    private currentCommoditySymbol: string | null = null;
+    private currentCommodityName: string | null = null;
+    private currentCommodityDays: number = 30;
     private indexChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
     private indexCandleSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addCandlestickSeries']> | null = null;
     private currentIndexSymbol: string | null = null;
@@ -313,6 +319,7 @@ class FinTerminal {
         this.bondsChartModal = document.getElementById('bonds-chart-modal') as HTMLElement;
         this.commoditiesModal = document.getElementById('commodities-modal') as HTMLElement;
         this.indexChartModal = document.getElementById('index-chart-modal') as HTMLElement;
+        this.commodityChartModal = document.getElementById('commodity-chart-modal') as HTMLElement;
 
         this.init();
     }
@@ -329,6 +336,7 @@ class FinTerminal {
         this.setupBondsModal();
         this.setupBondsChartModal();
         this.setupCommoditiesModal();
+        this.setupCommodityChartModal();
         this.updateTime();
         this.loadQuickTickers();
         setInterval(() => this.updateTime(), 1000);
@@ -1439,19 +1447,178 @@ class FinTerminal {
         this.commoditiesModal.classList.add('hidden');
     }
 
+    private setupCommodityChartModal(): void {
+        const closeBtn = document.getElementById('commodity-chart-modal-close');
+        const overlay = this.commodityChartModal.querySelector('.modal-overlay');
+
+        closeBtn?.addEventListener('click', () => this.closeCommodityChartModal());
+        overlay?.addEventListener('click', () => this.closeCommodityChartModal());
+
+        this.commodityChartModal.querySelectorAll('.chart-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const days = parseInt(target.dataset.days || '30', 10);
+                this.commodityChartModal.querySelectorAll('.chart-btn').forEach((b) => b.classList.remove('active'));
+                target.classList.add('active');
+                if (this.currentCommoditySymbol) {
+                    this.currentCommodityDays = days;
+                    this.loadCommodityChartData(this.currentCommoditySymbol, days);
+                }
+            });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !this.commodityChartModal.classList.contains('hidden')) {
+                this.closeCommodityChartModal();
+            }
+        });
+    }
+
+    private async openCommodityChartModal(symbol: string, name: string): Promise<void> {
+        this.currentCommoditySymbol = symbol;
+        this.currentCommodityName = name;
+        this.currentCommodityDays = 30;
+
+        const titleEl = document.getElementById('commodity-chart-title');
+        const loadingEl = document.getElementById('commodity-chart-loading');
+        const chartContainer = document.getElementById('commodity-chart-container');
+
+        if (titleEl) titleEl.textContent = `${name} (${symbol})`;
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (chartContainer) chartContainer.innerHTML = '';
+
+        this.commodityChartModal.querySelectorAll('.chart-btn').forEach((btn) => {
+            btn.classList.toggle('active', btn.getAttribute('data-days') === '30');
+        });
+
+        this.commodityChartModal.classList.remove('hidden');
+        await this.loadCommodityChartData(symbol, 30);
+    }
+
+    private closeCommodityChartModal(): void {
+        this.commodityChartModal.classList.add('hidden');
+        if (this.commodityChart) {
+            this.commodityChart.remove();
+            this.commodityChart = null;
+            this.commodityCandleSeries = null;
+        }
+        this.currentCommoditySymbol = null;
+        this.currentCommodityName = null;
+    }
+
+    private async loadCommodityChartData(symbol: string, days: number): Promise<void> {
+        const loadingEl = document.getElementById('commodity-chart-loading');
+        const chartContainer = document.getElementById('commodity-chart-container');
+
+        if (loadingEl) loadingEl.style.display = 'block';
+
+        try {
+            const response = await fetch(`/api/chart/${encodeURIComponent(symbol)}?days=${days}`);
+            if (!response.ok) throw new Error('Failed to fetch chart data');
+            const data: ChartData = await response.json();
+            this.renderCommodityChart(data);
+        } catch (error) {
+            if (chartContainer) {
+                chartContainer.innerHTML = '<div class="ratios-loading">Failed to load chart data</div>';
+            }
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    }
+
+    private renderCommodityChart(data: ChartData): void {
+        const chartContainer = document.getElementById('commodity-chart-container');
+        if (!chartContainer) return;
+
+        if (this.commodityChart) {
+            this.commodityChart.remove();
+            this.commodityChart = null;
+            this.commodityCandleSeries = null;
+        }
+
+        chartContainer.innerHTML = '';
+
+        if (data.points.length === 0) {
+            chartContainer.innerHTML = '<div class="ratios-loading">No chart data available</div>';
+            return;
+        }
+
+        this.commodityChart = LightweightCharts.createChart(chartContainer, {
+            width: chartContainer.clientWidth,
+            height: 400,
+            layout: {
+                background: { color: '#1a1a1a' },
+                textColor: '#ff9900',
+            },
+            grid: {
+                vertLines: { color: 'rgba(255, 153, 0, 0.1)' },
+                horzLines: { color: 'rgba(255, 153, 0, 0.1)' },
+            },
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+            },
+            rightPriceScale: {
+                borderColor: 'rgba(255, 153, 0, 0.3)',
+            },
+            timeScale: {
+                borderColor: 'rgba(255, 153, 0, 0.3)',
+                timeVisible: true,
+                secondsVisible: false,
+            },
+        });
+
+        this.commodityCandleSeries = this.commodityChart.addCandlestickSeries({
+            upColor: '#00ff00',
+            downColor: '#ff3333',
+            borderUpColor: '#00ff00',
+            borderDownColor: '#ff3333',
+            wickUpColor: '#00ff00',
+            wickDownColor: '#ff3333',
+        });
+
+        const chartData = data.points.map((point) => ({
+            time: point.timestamp as import('lightweight-charts').UTCTimestamp,
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close,
+        }));
+
+        this.commodityCandleSeries.setData(chartData);
+        this.commodityChart.timeScale().fitContent();
+
+        const resizeObserver = new ResizeObserver(() => {
+            if (this.commodityChart && chartContainer) {
+                this.commodityChart.applyOptions({
+                    width: chartContainer.clientWidth,
+                });
+            }
+        });
+        resizeObserver.observe(chartContainer);
+    }
+
     private renderCommodities(data: CommoditiesResponse): void {
         const bodyEl = document.getElementById('commodities-body');
         if (!bodyEl) return;
 
         const categories = [...new Set(data.commodities.map(c => c.category))];
 
+        const escapeHtml = (str: string): string => {
+            return str
+                .replace(/&/g, '')
+                .replace(/"/g, '')
+                .replace(/'/g, '')
+                .replace(/</g, '')
+                .replace(/>/g, '');
+        };
+
         const renderCommodityRow = (commodity: Commodity): string => {
             const changeClass = commodity.change >= 0 ? 'positive' : 'negative';
             const sign = commodity.change >= 0 ? '+' : '';
             return `
-                <div class="commodity-row">
+                <div class="commodity-row clickable" data-symbol="${escapeHtml(commodity.symbol)}" data-name="${escapeHtml(commodity.name)}">
                     <div class="commodity-info">
-                        <span class="commodity-name">${commodity.name}</span>
+                        <span class="commodity-name">${escapeHtml(commodity.name)}</span>
                         <span class="commodity-unit">${commodity.unit}</span>
                     </div>
                     <div class="commodity-data">
@@ -1475,6 +1642,16 @@ class FinTerminal {
         }
 
         bodyEl.innerHTML = html;
+
+        bodyEl.querySelectorAll('.commodity-row.clickable').forEach((row) => {
+            row.addEventListener('click', () => {
+                const symbol = row.getAttribute('data-symbol');
+                const name = row.getAttribute('data-name');
+                if (symbol && name) {
+                    this.openCommodityChartModal(symbol, name);
+                }
+            });
+        });
     }
 
     private async openStatementsModal(): Promise<void> {

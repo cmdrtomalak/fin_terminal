@@ -1524,3 +1524,22 @@ body {
         min-width: auto;
     }
 }
+
+/* Commodity Chart Modal */
+.commodity-chart-modal-content {
+    max-width: 900px;
+}
+
+#commodity-chart-container {
+    height: 400px;
+    margin-top: 15px;
+}
+
+.commodity-row.clickable {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.commodity-row.clickable:hover {
+    background: rgba(255, 153, 0, 0.1);
+}
