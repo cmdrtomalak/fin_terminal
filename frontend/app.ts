@@ -666,10 +666,12 @@ class FinTerminal {
     private setupGovtModal(): void {
         const govtBtn = document.querySelector('[data-fn="GOVT"]');
         const closeBtn = document.getElementById('govt-modal-close');
+        const refreshBtn = document.getElementById('govt-refresh-btn');
         const overlay = this.govtModal.querySelector('.modal-overlay');
 
         govtBtn?.addEventListener('click', () => this.openGovtModal());
         closeBtn?.addEventListener('click', () => this.closeGovtModal());
+        refreshBtn?.addEventListener('click', () => this.refreshTreasury());
         overlay?.addEventListener('click', () => this.closeGovtModal());
 
         document.addEventListener('keydown', (e) => {
@@ -682,7 +684,6 @@ class FinTerminal {
     private async openGovtModal(): Promise<void> {
         const loadingEl = document.getElementById('govt-loading');
         const bodyEl = document.getElementById('govt-body');
-        const dateEl = document.getElementById('govt-date');
 
         if (loadingEl) loadingEl.style.display = 'block';
         if (bodyEl) bodyEl.innerHTML = '';
@@ -693,7 +694,6 @@ class FinTerminal {
             const response = await fetch('/api/treasury');
             if (!response.ok) throw new Error('Failed to fetch');
             const rates: TreasuryRates = await response.json();
-            if (dateEl) dateEl.textContent = `As of ${rates.date}`;
             this.renderTreasury(rates);
         } catch {
             if (bodyEl) bodyEl.innerHTML = '<div class="ratios-loading">Failed to load treasury rates</div>';
@@ -704,6 +704,34 @@ class FinTerminal {
 
     private closeGovtModal(): void {
         this.govtModal.classList.add('hidden');
+    }
+
+    private async refreshTreasury(): Promise<void> {
+        const loadingEl = document.getElementById('govt-loading');
+        const bodyEl = document.getElementById('govt-body');
+        const refreshBtn = document.getElementById('govt-refresh-btn');
+
+        if (refreshBtn) {
+            refreshBtn.classList.add('spinning');
+            (refreshBtn as HTMLButtonElement).disabled = true;
+        }
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (bodyEl) bodyEl.innerHTML = '';
+
+        try {
+            const response = await fetch('/api/treasury/refresh', { method: 'POST' });
+            if (!response.ok) throw new Error('Failed to refresh');
+            const rates: TreasuryRates = await response.json();
+            this.renderTreasury(rates);
+        } catch {
+            if (bodyEl) bodyEl.innerHTML = '<div class="ratios-loading">Failed to refresh treasury rates</div>';
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (refreshBtn) {
+                refreshBtn.classList.remove('spinning');
+                (refreshBtn as HTMLButtonElement).disabled = false;
+            }
+        }
     }
 
     private renderTreasury(data: TreasuryRates): void {

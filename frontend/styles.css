@@ -1005,6 +1005,37 @@ body {
     color: var(--bb-gray);
 }
 
+.govt-refresh-btn {
+    background: transparent;
+    border: 1px solid var(--bb-border);
+    color: var(--bb-amber);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-left: 10px;
+    transition: all 0.2s ease;
+}
+
+.govt-refresh-btn:hover {
+    background: var(--bb-amber);
+    color: var(--bb-bg);
+}
+
+.govt-refresh-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.govt-refresh-btn.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .treasury-section {
     margin-bottom: 20px;
 }

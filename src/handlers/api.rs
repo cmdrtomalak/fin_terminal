@@ -152,6 +152,19 @@ pub async fn get_treasury(
     }
 }
 
+pub async fn refresh_treasury(
+    State(clients): State<AppState>,
+) -> Result<Json<TreasuryRates>, StatusCode> {
+    clients.treasury.invalidate_cache().await;
+    match clients.treasury.get_treasury_rates().await {
+        Ok(rates) => Ok(Json(rates)),
+        Err(e) => {
+            tracing::error!("Treasury refresh failed: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub struct TreasuryHistoryQuery {
     #[serde(default = "default_treasury_history_days")]

@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-const CACHE_TTL_SECS: u64 = 15 * 60;
-const HISTORY_CACHE_TTL_SECS: u64 = 60 * 60;
+const CACHE_TTL_SECS: u64 = 24 * 60 * 60;
+const HISTORY_CACHE_TTL_SECS: u64 = 24 * 60 * 60;
 
 #[derive(Clone)]
 pub struct TreasuryClient {
@@ -181,6 +181,18 @@ impl TreasuryClient {
             maturity: maturity.to_string(),
             points: filtered_points,
         })
+    }
+
+    pub async fn invalidate_cache(&self) {
+        {
+            let mut cache = self.cache.write().await;
+            *cache = None;
+        }
+        {
+            let mut history_cache = self.history_cache.write().await;
+            *history_cache = None;
+        }
+        tracing::info!("Treasury cache invalidated");
     }
 
     fn parse_history_csv(
