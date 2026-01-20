@@ -271,7 +271,13 @@ class FinTerminal {
     private bondsModal: HTMLElement;
     private bondsChartModal: HTMLElement;
     private commoditiesModal: HTMLElement;
+    private indexChartModal: HTMLElement;
     private treasuryChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
+    private indexChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
+    private indexCandleSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addCandlestickSeries']> | null = null;
+    private currentIndexSymbol: string | null = null;
+    private currentIndexName: string | null = null;
+    private currentIndexDays: number = 30;
     private treasuryLineSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addLineSeries']> | null = null;
     private bondsChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
     private bondsLineSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addLineSeries']> | null = null;
@@ -306,6 +312,7 @@ class FinTerminal {
         this.bondsModal = document.getElementById('bonds-modal') as HTMLElement;
         this.bondsChartModal = document.getElementById('bonds-chart-modal') as HTMLElement;
         this.commoditiesModal = document.getElementById('commodities-modal') as HTMLElement;
+        this.indexChartModal = document.getElementById('index-chart-modal') as HTMLElement;
 
         this.init();
     }
@@ -315,6 +322,7 @@ class FinTerminal {
         this.setupModalListeners();
         this.setupRatiosModal();
         this.setupIndexModal();
+        this.setupIndexChartModal();
         this.setupStatementsModal();
         this.setupGovtModal();
         this.setupTreasuryChartModal();
@@ -562,6 +570,156 @@ class FinTerminal {
         this.indexModal.classList.add('hidden');
     }
 
+    private setupIndexChartModal(): void {
+        const closeBtn = document.getElementById('index-chart-modal-close');
+        const overlay = this.indexChartModal.querySelector('.modal-overlay');
+
+        closeBtn?.addEventListener('click', () => this.closeIndexChartModal());
+        overlay?.addEventListener('click', () => this.closeIndexChartModal());
+
+        this.indexChartModal.querySelectorAll('.chart-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const days = parseInt(target.dataset.days || '30', 10);
+                this.indexChartModal.querySelectorAll('.chart-btn').forEach((b) => b.classList.remove('active'));
+                target.classList.add('active');
+                if (this.currentIndexSymbol) {
+                    this.currentIndexDays = days;
+                    this.loadIndexChartData(this.currentIndexSymbol, days);
+                }
+            });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !this.indexChartModal.classList.contains('hidden')) {
+                this.closeIndexChartModal();
+            }
+        });
+    }
+
+    private async openIndexChartModal(symbol: string, name: string): Promise<void> {
+        this.currentIndexSymbol = symbol;
+        this.currentIndexName = name;
+        this.currentIndexDays = 30;
+
+        const titleEl = document.getElementById('index-chart-title');
+        const loadingEl = document.getElementById('index-chart-loading');
+        const chartContainer = document.getElementById('index-chart-container');
+
+        if (titleEl) titleEl.textContent = `${name} (${symbol})`;
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (chartContainer) chartContainer.innerHTML = '';
+
+        this.indexChartModal.querySelectorAll('.chart-btn').forEach((btn) => {
+            btn.classList.toggle('active', btn.getAttribute('data-days') === '30');
+        });
+
+        this.indexChartModal.classList.remove('hidden');
+        await this.loadIndexChartData(symbol, 30);
+    }
+
+    private closeIndexChartModal(): void {
+        this.indexChartModal.classList.add('hidden');
+        if (this.indexChart) {
+            this.indexChart.remove();
+            this.indexChart = null;
+            this.indexCandleSeries = null;
+        }
+        this.currentIndexSymbol = null;
+        this.currentIndexName = null;
+    }
+
+    private async loadIndexChartData(symbol: string, days: number): Promise<void> {
+        const loadingEl = document.getElementById('index-chart-loading');
+        const chartContainer = document.getElementById('index-chart-container');
+
+        if (loadingEl) loadingEl.style.display = 'block';
+
+        try {
+            const response = await fetch(`/api/chart/${encodeURIComponent(symbol)}?days=${days}`);
+            if (!response.ok) throw new Error('Failed to fetch chart data');
+            const data: ChartData = await response.json();
+            this.renderIndexChart(data);
+        } catch (error) {
+            if (chartContainer) {
+                chartContainer.innerHTML = '<div class="ratios-loading">Failed to load chart data</div>';
+            }
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    }
+
+    private renderIndexChart(data: ChartData): void {
+        const chartContainer = document.getElementById('index-chart-container');
+        if (!chartContainer) return;
+
+        if (this.indexChart) {
+            this.indexChart.remove();
+            this.indexChart = null;
+            this.indexCandleSeries = null;
+        }
+
+        chartContainer.innerHTML = '';
+
+        if (data.points.length === 0) {
+            chartContainer.innerHTML = '<div class="ratios-loading">No chart data available</div>';
+            return;
+        }
+
+        this.indexChart = LightweightCharts.createChart(chartContainer, {
+            width: chartContainer.clientWidth,
+            height: 400,
+            layout: {
+                background: { color: '#1a1a1a' },
+                textColor: '#ff9900',
+            },
+            grid: {
+                vertLines: { color: 'rgba(255, 153, 0, 0.1)' },
+                horzLines: { color: 'rgba(255, 153, 0, 0.1)' },
+            },
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+            },
+            rightPriceScale: {
+                borderColor: 'rgba(255, 153, 0, 0.3)',
+            },
+            timeScale: {
+                borderColor: 'rgba(255, 153, 0, 0.3)',
+                timeVisible: true,
+                secondsVisible: false,
+            },
+        });
+
+        this.indexCandleSeries = this.indexChart.addCandlestickSeries({
+            upColor: '#00ff00',
+            downColor: '#ff3333',
+            borderUpColor: '#00ff00',
+            borderDownColor: '#ff3333',
+            wickUpColor: '#00ff00',
+            wickDownColor: '#ff3333',
+        });
+
+        const chartData = data.points.map((point) => ({
+            time: point.timestamp as import('lightweight-charts').UTCTimestamp,
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close,
+        }));
+
+        this.indexCandleSeries.setData(chartData);
+        this.indexChart.timeScale().fitContent();
+
+        const resizeObserver = new ResizeObserver(() => {
+            if (this.indexChart && chartContainer) {
+                this.indexChart.applyOptions({
+                    width: chartContainer.clientWidth,
+                });
+            }
+        });
+        resizeObserver.observe(chartContainer);
+    }
+
     private renderIndices(indices: IndexQuote[]): void {
         const bodyEl = document.getElementById('index-body');
         if (!bodyEl) return;
@@ -607,6 +765,15 @@ class FinTerminal {
             'Canada': 'CANADA'
         };
 
+        const escapeHtml = (str: string): string => {
+            return str
+                .replace(/&/g, '')
+                .replace(/"/g, '')
+                .replace(/'/g, '')
+                .replace(/</g, '')
+                .replace(/>/g, '');
+        };
+
         grouped.forEach((items, region) => {
             html += `<div class="index-section">
                 <div class="index-section-title">${regionLabels[region] || region}</div>`;
@@ -615,10 +782,10 @@ class FinTerminal {
                 const changeClass = idx.change >= 0 ? 'positive' : 'negative';
                 const sign = idx.change >= 0 ? '+' : '';
                 html += `
-                <div class="index-row">
+                <div class="index-row clickable" data-symbol="${escapeHtml(idx.symbol)}" data-name="${escapeHtml(idx.name)}">
                     <div class="index-info">
-                        <span class="index-symbol">${idx.symbol}</span>
-                        <span class="index-name">${idx.name}</span>
+                        <span class="index-symbol">${escapeHtml(idx.symbol)}</span>
+                        <span class="index-name">${escapeHtml(idx.name)}</span>
                     </div>
                     <div class="index-data">
                         <span class="index-price">${idx.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -632,6 +799,16 @@ class FinTerminal {
         });
 
         bodyEl.innerHTML = html;
+
+        bodyEl.querySelectorAll('.index-row.clickable').forEach((row) => {
+            row.addEventListener('click', () => {
+                const symbol = row.getAttribute('data-symbol');
+                const name = row.getAttribute('data-name');
+                if (symbol && name) {
+                    this.openIndexChartModal(symbol, name);
+                }
+            });
+        });
     }
 
     private setupStatementsModal(): void {

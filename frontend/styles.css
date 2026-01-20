@@ -1149,8 +1149,23 @@ body {
     background: rgba(255, 153, 0, 0.1);
 }
 
-.treasury-chart-modal-content {
+.treasury-chart-modal-content,
+.index-chart-modal-content {
     max-width: 900px;
+}
+
+#index-chart-container {
+    height: 400px;
+    margin-top: 15px;
+}
+
+.index-row.clickable {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.index-row.clickable:hover {
+    background: rgba(255, 153, 0, 0.1);
 }
 
 .treasury-chart-header {
