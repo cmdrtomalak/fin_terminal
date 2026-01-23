@@ -517,6 +517,100 @@ impl YahooClient {
         None
     }
 
+    async fn fetch_timeseries_data(
+        &self,
+        symbol: &str,
+        types: &[String],
+        start: i64,
+        end: i64,
+    ) -> Result<std::collections::HashMap<String, Vec<(String, f64)>>, reqwest::Error> {
+        let types_param = types.join(",");
+        let url = format!(
+            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{}?type={}&period1={}&period2={}&merge=false&padTimeSeries=true",
+            urlencoding::encode(symbol),
+            urlencoding::encode(&types_param),
+            start,
+            end
+        );
+
+        let response = self.client.get(&url).send().await?;
+        tracing::info!("Timeseries API response status: {}", response.status());
+
+        if !response.status().is_success() {
+            tracing::error!("Timeseries API returned status: {}", response.status());
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let text = response.text().await?;
+        tracing::info!("Response length: {} bytes", text.len());
+
+        let data: TimeseriesResponse = match serde_json::from_str(&text) {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::error!(
+                    "Timeseries JSON parse error: {}. Response: {}",
+                    e,
+                    &text[..text.len().min(500)]
+                );
+                return Ok(std::collections::HashMap::new());
+            }
+        };
+
+        let results = match data.timeseries.result {
+            Some(r) => r,
+            None => return Ok(std::collections::HashMap::new()),
+        };
+
+        let mut data_by_type: std::collections::HashMap<String, Vec<(String, f64)>> =
+            std::collections::HashMap::new();
+
+        for result in results {
+            let mut type_fields = result.meta.type_field.unwrap_or_default();
+            if type_fields.is_empty() {
+                type_fields = result
+                    .data
+                    .keys()
+                    .filter(|key| key.as_str() != "timestamp")
+                    .cloned()
+                    .collect();
+            }
+            for type_name in &type_fields {
+                tracing::debug!(
+                    "Processing type: {}, available keys: {:?}",
+                    type_name,
+                    result.data.keys().collect::<Vec<_>>()
+                );
+                if let Some(data_arr) = result.data.get(type_name) {
+                    match serde_json::from_value::<Vec<Option<TimeseriesDataPoint>>>(data_arr.clone()) {
+                        Ok(points) => {
+                            let values: Vec<(String, f64)> = points
+                                .into_iter()
+                                .flatten()
+                                .filter_map(|p| {
+                                    match (p.as_of_date, p.reported_value.and_then(|v| v.raw)) {
+                                        (Some(date), Some(val)) => Some((date, val)),
+                                        _ => None,
+                                    }
+                                })
+                                .collect();
+                            tracing::debug!("Type {} has {} values", type_name, values.len());
+                            if !values.is_empty() {
+                                data_by_type.insert(type_name.clone(), values);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to parse {} data: {}", type_name, e);
+                        }
+                    }
+                } else {
+                    tracing::debug!("No data found for type: {}", type_name);
+                }
+            }
+        }
+
+        Ok(data_by_type)
+    }
+
     pub async fn get_financials(
         &self,
         symbol: &str,
@@ -807,14 +901,18 @@ impl YahooClient {
             "FreeCashFlow",
         ];
 
-        let all_types: Vec<String> = income_keys
+        let annual_types: Vec<String> = income_keys
             .iter()
             .chain(balance_keys.iter())
             .chain(cashflow_keys.iter())
             .map(|k| format!("annual{}", k))
             .collect();
 
-        let types_param = all_types.join(",");
+        let quarterly_types: Vec<String> = income_keys
+            .iter()
+            .chain(cashflow_keys.iter())
+            .map(|k| format!("quarterly{}", k))
+            .collect();
         // Use 10 years back and 1 year forward to capture all available data
         // Yahoo API returns max 4 years regardless of range
         let start = chrono::Utc::now()
@@ -825,85 +923,34 @@ impl YahooClient {
             .checked_add_signed(chrono::Duration::days(365))
             .map(|d| d.timestamp())
             .unwrap_or(chrono::Utc::now().timestamp());
-
-        let url = format!(
-            "https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{}?type={}&period1={}&period2={}&merge=false&padTimeSeries=true",
-            urlencoding::encode(symbol),
-            urlencoding::encode(&types_param),
-            start,
-            end
-        );
-
-        let response = self.client.get(&url).send().await?;
-        tracing::info!("Timeseries API response status: {}", response.status());
-
-        if !response.status().is_success() {
-            tracing::error!("Timeseries API returned status: {}", response.status());
-            return Ok(None);
-        }
-
-        let text = response.text().await?;
-        tracing::info!("Response length: {} bytes", text.len());
-
-        let data: TimeseriesResponse = match serde_json::from_str(&text) {
-            Ok(d) => d,
-            Err(e) => {
-                tracing::error!(
-                    "Timeseries JSON parse error: {}. Response: {}",
-                    e,
-                    &text[..text.len().min(500)]
-                );
-                return Ok(None);
-            }
-        };
-
-        let results = match data.timeseries.result {
-            Some(r) => r,
-            None => return Ok(None),
-        };
-
         let mut data_by_type: std::collections::HashMap<String, Vec<(String, f64)>> =
             std::collections::HashMap::new();
 
-        for result in results {
-            if let Some(type_fields) = result.meta.type_field {
-                for type_name in &type_fields {
-                    tracing::debug!(
-                        "Processing type: {}, available keys: {:?}",
-                        type_name,
-                        result.data.keys().collect::<Vec<_>>()
-                    );
-                    if let Some(data_arr) = result.data.get(type_name) {
-                        match serde_json::from_value::<Vec<TimeseriesDataPoint>>(data_arr.clone()) {
-                            Ok(points) => {
-                                let values: Vec<(String, f64)> = points
-                                    .into_iter()
-                                    .filter_map(|p| {
-                                        match (p.as_of_date, p.reported_value.and_then(|v| v.raw)) {
-                                            (Some(date), Some(val)) => Some((date, val)),
-                                            _ => None,
-                                        }
-                                    })
-                                    .collect();
-                                tracing::debug!("Type {} has {} values", type_name, values.len());
-                                if !values.is_empty() {
-                                    data_by_type.insert(type_name.clone(), values);
-                                }
-                            }
-                            Err(e) => {
-                                tracing::warn!("Failed to parse {} data: {}", type_name, e);
-                            }
-                        }
-                    } else {
-                        tracing::debug!("No data found for type: {}", type_name);
-                    }
-                }
-            }
+        let annual_data = self
+            .fetch_timeseries_data(symbol, &annual_types, start, end)
+            .await?;
+
+        if annual_data.is_empty() {
+            return Ok(None);
+        }
+
+        data_by_type.extend(annual_data);
+
+        if !quarterly_types.is_empty() {
+            let quarterly_data = self
+                .fetch_timeseries_data(symbol, &quarterly_types, start, end)
+                .await?;
+            data_by_type.extend(quarterly_data);
         }
 
         let mut fiscal_years: Vec<String> = data_by_type
-            .values()
-            .flat_map(|v| v.iter().map(|(date, _)| date.clone()))
+            .iter()
+            .filter(|(key, _)| key.starts_with("annual"))
+            .flat_map(|(_, values)| {
+                values
+                    .iter()
+                    .filter_map(|(date, _)| date.split('-').next().map(|year| year.to_string()))
+            })
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .collect();
@@ -911,24 +958,41 @@ impl YahooClient {
         fiscal_years.reverse();
         let fiscal_years: Vec<String> = fiscal_years.into_iter().take(4).collect();
 
-        tracing::debug!("Fiscal years: {:?}", fiscal_years);
+        tracing::debug!("Fiscal years (annual): {:?}", fiscal_years);
         tracing::debug!(
             "Data types collected: {:?}",
             data_by_type.keys().collect::<Vec<_>>()
         );
 
-        let get_value = |key: &str, date: &str| -> Option<f64> {
+        let get_value = |key: &str, year: &str| -> Option<f64> {
             let full_key = format!("annual{}", key);
-            let result = data_by_type
-                .get(&full_key)
-                .and_then(|v| v.iter().find(|(d, _)| d == date).map(|(_, val)| *val));
+            let values = data_by_type.get(&full_key)?;
+            let mut matches: Vec<_> = values
+                .iter()
+                .filter(|(date, _)| date.starts_with(year))
+                .collect();
+            matches.sort_by(|a, b| b.0.cmp(&a.0));
+            let result = matches.first().map(|(_, val)| *val);
             if result.is_none() {
-                tracing::trace!("No value for {} at {}", full_key, date);
+                tracing::trace!("No value for {} in {}", full_key, year);
             }
             result
         };
 
-        let income_statements: Vec<IncomeStatement> = fiscal_years
+        let sum_quarterly = |key: &str| -> Option<f64> {
+            let full_key = format!("quarterly{}", key);
+            let values = data_by_type.get(&full_key)?;
+            let mut sorted = values.clone();
+            sorted.sort_by(|a, b| b.0.cmp(&a.0));
+            if sorted.len() < 4 {
+                return None;
+            }
+            Some(sorted.iter().take(4).map(|(_, value)| *value).sum())
+        };
+
+        let has_any_values = |values: &[Option<f64>]| values.iter().any(|value| value.is_some());
+
+        let mut income_statements: Vec<IncomeStatement> = fiscal_years
             .iter()
             .map(|fy| IncomeStatement {
                 fiscal_year: fy.clone(),
@@ -947,6 +1011,33 @@ impl YahooClient {
                 ebitda: get_value("EBITDA", fy),
             })
             .collect();
+
+        let ttm_income = IncomeStatement {
+            fiscal_year: "TTM".to_string(),
+            total_revenue: sum_quarterly("TotalRevenue"),
+            cost_of_revenue: sum_quarterly("CostOfRevenue"),
+            gross_profit: sum_quarterly("GrossProfit"),
+            research_development: sum_quarterly("ResearchAndDevelopment"),
+            selling_general_admin: sum_quarterly("SellingGeneralAndAdministration"),
+            total_operating_expenses: sum_quarterly("OperatingExpense"),
+            operating_income: sum_quarterly("OperatingIncome"),
+            interest_expense: sum_quarterly("InterestExpense"),
+            income_before_tax: sum_quarterly("PretaxIncome"),
+            income_tax_expense: sum_quarterly("TaxProvision"),
+            net_income: sum_quarterly("NetIncome"),
+            ebit: sum_quarterly("EBIT"),
+            ebitda: sum_quarterly("EBITDA"),
+        };
+
+        if has_any_values(&[
+            ttm_income.total_revenue,
+            ttm_income.net_income,
+            ttm_income.gross_profit,
+            ttm_income.operating_income,
+            ttm_income.ebitda,
+        ]) {
+            income_statements.insert(0, ttm_income);
+        }
 
         let balance_sheets: Vec<BalanceSheet> = fiscal_years
             .iter()
@@ -977,7 +1068,7 @@ impl YahooClient {
             })
             .collect();
 
-        let cash_flows: Vec<CashFlow> = fiscal_years
+        let mut cash_flows: Vec<CashFlow> = fiscal_years
             .iter()
             .map(|fy| {
                 let op_cf = get_value("OperatingCashFlow", fy);
@@ -1004,6 +1095,42 @@ impl YahooClient {
                 }
             })
             .collect();
+
+        let ttm_operating_cash_flow = sum_quarterly("OperatingCashFlow");
+        let ttm_capital_expenditures = sum_quarterly("CapitalExpenditure");
+        let ttm_free_cash_flow = sum_quarterly("FreeCashFlow").or_else(|| match (
+            ttm_operating_cash_flow,
+            ttm_capital_expenditures,
+        ) {
+            (Some(op_cf), Some(capex)) => Some(op_cf + capex),
+            _ => None,
+        });
+
+        let ttm_cash_flow = CashFlow {
+            fiscal_year: "TTM".to_string(),
+            operating_cash_flow: ttm_operating_cash_flow,
+            net_income: sum_quarterly("NetIncomeFromContinuingOperations"),
+            depreciation: sum_quarterly("DepreciationAndAmortization"),
+            change_in_working_capital: sum_quarterly("ChangeInWorkingCapital"),
+            investing_cash_flow: sum_quarterly("InvestingCashFlow"),
+            capital_expenditures: ttm_capital_expenditures,
+            investments: sum_quarterly("PurchaseOfInvestment"),
+            financing_cash_flow: sum_quarterly("FinancingCashFlow"),
+            dividends_paid: sum_quarterly("CashDividendsPaid"),
+            stock_repurchases: sum_quarterly("RepurchaseOfCapitalStock"),
+            debt_repayment: sum_quarterly("RepaymentOfDebt"),
+            free_cash_flow: ttm_free_cash_flow,
+        };
+
+        if has_any_values(&[
+            ttm_cash_flow.operating_cash_flow,
+            ttm_cash_flow.free_cash_flow,
+            ttm_cash_flow.net_income,
+            ttm_cash_flow.investing_cash_flow,
+            ttm_cash_flow.financing_cash_flow,
+        ]) {
+            cash_flows.insert(0, ttm_cash_flow);
+        }
 
         let currency = match self.get_reporting_currency(symbol).await {
             Ok(Some(code)) => Some(code),
