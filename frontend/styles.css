@@ -896,6 +896,8 @@ body {
     flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 10px;
+    margin-left: auto;
+    text-align: right;
 }
 
 .statements-currency-note {
@@ -922,12 +924,53 @@ body {
     width: 100%;
     font-size: 10px;
     color: var(--bb-gray);
+    white-space: nowrap;
 }
 
 .statements-tabs {
     display: flex;
     gap: 8px;
     margin-left: 20px;
+}
+
+.statements-period-tabs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 10px;
+    justify-content: space-between;
+}
+
+.statements-period-label {
+    font-size: 11px;
+    color: var(--bb-gray);
+}
+
+.statements-period-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stmt-period-tab {
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    background: var(--bb-panel);
+    border: 1px solid var(--bb-border);
+    color: var(--bb-amber);
+    cursor: pointer;
+}
+
+.stmt-period-tab:hover {
+    border-color: var(--bb-amber);
+    color: var(--bb-amber);
+}
+
+.stmt-period-tab.active {
+    background: var(--bb-amber);
+    color: var(--bb-black);
+    border-color: var(--bb-amber);
 }
 
 .stmt-tab {

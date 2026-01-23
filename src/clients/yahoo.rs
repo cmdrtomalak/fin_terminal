@@ -910,6 +910,7 @@ impl YahooClient {
 
         let quarterly_types: Vec<String> = income_keys
             .iter()
+            .chain(balance_keys.iter())
             .chain(cashflow_keys.iter())
             .map(|k| format!("quarterly{}", k))
             .collect();
@@ -978,6 +979,35 @@ impl YahooClient {
             }
             result
         };
+
+        let get_quarter_value = |key: &str, date: &str| -> Option<f64> {
+            let full_key = format!("quarterly{}", key);
+            data_by_type
+                .get(&full_key)
+                .and_then(|values| values.iter().find(|(d, _)| d == date).map(|(_, val)| *val))
+        };
+
+        let format_quarter_label = |date: &str| -> String {
+            let mut parts = date.split('-');
+            let year = parts.next().unwrap_or(date);
+            let month = parts
+                .next()
+                .and_then(|m| m.parse::<u32>().ok())
+                .unwrap_or(1);
+            let quarter = ((month.saturating_sub(1)) / 3) + 1;
+            format!("{} Q{}", year, quarter)
+        };
+
+        let mut quarter_dates: Vec<String> = data_by_type
+            .iter()
+            .filter(|(key, _)| key.starts_with("quarterly"))
+            .flat_map(|(_, values)| values.iter().map(|(date, _)| date.clone()))
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        quarter_dates.sort();
+        quarter_dates.reverse();
+        let quarter_dates: Vec<String> = quarter_dates.into_iter().take(5).collect();
 
         let sum_quarterly = |key: &str| -> Option<f64> {
             let full_key = format!("quarterly{}", key);
@@ -1068,6 +1098,55 @@ impl YahooClient {
             })
             .collect();
 
+        let income_statements_quarterly: Vec<IncomeStatement> = quarter_dates
+            .iter()
+            .map(|date| IncomeStatement {
+                fiscal_year: format_quarter_label(date),
+                total_revenue: get_quarter_value("TotalRevenue", date),
+                cost_of_revenue: get_quarter_value("CostOfRevenue", date),
+                gross_profit: get_quarter_value("GrossProfit", date),
+                research_development: get_quarter_value("ResearchAndDevelopment", date),
+                selling_general_admin: get_quarter_value("SellingGeneralAndAdministration", date),
+                total_operating_expenses: get_quarter_value("OperatingExpense", date),
+                operating_income: get_quarter_value("OperatingIncome", date),
+                interest_expense: get_quarter_value("InterestExpense", date),
+                income_before_tax: get_quarter_value("PretaxIncome", date),
+                income_tax_expense: get_quarter_value("TaxProvision", date),
+                net_income: get_quarter_value("NetIncome", date),
+                ebit: get_quarter_value("EBIT", date),
+                ebitda: get_quarter_value("EBITDA", date),
+            })
+            .collect();
+
+        let balance_sheets_quarterly: Vec<BalanceSheet> = quarter_dates
+            .iter()
+            .map(|date| BalanceSheet {
+                fiscal_year: format_quarter_label(date),
+                total_assets: get_quarter_value("TotalAssets", date),
+                total_current_assets: get_quarter_value("CurrentAssets", date),
+                cash_and_equivalents: get_quarter_value("CashAndCashEquivalents", date),
+                short_term_investments: get_quarter_value("OtherShortTermInvestments", date),
+                accounts_receivable: get_quarter_value("AccountsReceivable", date),
+                inventory: get_quarter_value("Inventory", date),
+                total_non_current_assets: get_quarter_value("TotalNonCurrentAssets", date),
+                property_plant_equipment: get_quarter_value("NetPPE", date),
+                goodwill: get_quarter_value("Goodwill", date),
+                intangible_assets: get_quarter_value("OtherIntangibleAssets", date),
+                total_liabilities: get_quarter_value("TotalLiabilitiesNetMinorityInterest", date),
+                total_current_liabilities: get_quarter_value("CurrentLiabilities", date),
+                accounts_payable: get_quarter_value("AccountsPayable", date),
+                short_term_debt: get_quarter_value("CurrentDebt", date),
+                total_non_current_liabilities: get_quarter_value(
+                    "TotalNonCurrentLiabilitiesNetMinorityInterest",
+                    date,
+                ),
+                long_term_debt: get_quarter_value("LongTermDebt", date),
+                total_stockholders_equity: get_quarter_value("StockholdersEquity", date),
+                retained_earnings: get_quarter_value("RetainedEarnings", date),
+                common_stock: get_quarter_value("CommonStock", date),
+            })
+            .collect();
+
         let mut cash_flows: Vec<CashFlow> = fiscal_years
             .iter()
             .map(|fy| {
@@ -1132,6 +1211,34 @@ impl YahooClient {
             cash_flows.insert(0, ttm_cash_flow);
         }
 
+        let cash_flows_quarterly: Vec<CashFlow> = quarter_dates
+            .iter()
+            .map(|date| {
+                let op_cf = get_quarter_value("OperatingCashFlow", date);
+                let capex = get_quarter_value("CapitalExpenditure", date);
+                let fcf = get_quarter_value("FreeCashFlow", date).or_else(|| match (op_cf, capex) {
+                    (Some(o), Some(c)) => Some(o + c),
+                    _ => None,
+                });
+
+                CashFlow {
+                    fiscal_year: format_quarter_label(date),
+                    operating_cash_flow: op_cf,
+                    net_income: get_quarter_value("NetIncomeFromContinuingOperations", date),
+                    depreciation: get_quarter_value("DepreciationAndAmortization", date),
+                    change_in_working_capital: get_quarter_value("ChangeInWorkingCapital", date),
+                    investing_cash_flow: get_quarter_value("InvestingCashFlow", date),
+                    capital_expenditures: capex,
+                    investments: get_quarter_value("PurchaseOfInvestment", date),
+                    financing_cash_flow: get_quarter_value("FinancingCashFlow", date),
+                    dividends_paid: get_quarter_value("CashDividendsPaid", date),
+                    stock_repurchases: get_quarter_value("RepurchaseOfCapitalStock", date),
+                    debt_repayment: get_quarter_value("RepaymentOfDebt", date),
+                    free_cash_flow: fcf,
+                }
+            })
+            .collect();
+
         let currency = match self.get_reporting_currency(symbol).await {
             Ok(Some(code)) => Some(code),
             _ => None,
@@ -1154,6 +1261,9 @@ impl YahooClient {
             income_statements,
             balance_sheets,
             cash_flows,
+            income_statements_quarterly,
+            balance_sheets_quarterly,
+            cash_flows_quarterly,
         }))
     }
 }

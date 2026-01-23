@@ -172,6 +172,9 @@ export interface FinancialStatements {
     income_statements: IncomeStatement[];
     balance_sheets: BalanceSheet[];
     cash_flows: CashFlow[];
+    income_statements_quarterly: IncomeStatement[];
+    balance_sheets_quarterly: BalanceSheet[];
+    cash_flows_quarterly: CashFlow[];
 }
 
 export interface TreasuryRate {

@@ -198,12 +198,19 @@
                 <button id="statements-modal-close" class="modal-close">&times;</button>
             </div>
             <div id="statements-currency-subtitle" class="statements-currency-subtitle"></div>
-            <div id="statements-loading" class="ratios-loading">Loading statements...</div>
-            <div id="statements-currency-meta" class="statements-currency-meta hidden">
-                <span id="statements-currency-note" class="statements-currency-note"></span>
-                <button id="statements-currency-toggle" class="statements-currency-toggle" type="button"></button>
-                <div id="statements-currency-rate" class="statements-currency-rate hidden"></div>
+            <div id="statements-period-tabs" class="statements-period-tabs">
+                <div class="statements-period-left">
+                    <span class="statements-period-label">Period</span>
+                    <button class="stmt-period-tab statements-currency-toggle active" data-period="annual" type="button">Annual</button>
+                    <button class="stmt-period-tab statements-currency-toggle" data-period="quarterly" type="button">Quarterly</button>
+                </div>
+                <div id="statements-currency-meta" class="statements-currency-meta hidden">
+                    <span id="statements-currency-note" class="statements-currency-note"></span>
+                    <button id="statements-currency-toggle" class="statements-currency-toggle" type="button"></button>
+                    <div id="statements-currency-rate" class="statements-currency-rate hidden"></div>
+                </div>
             </div>
+            <div id="statements-loading" class="ratios-loading">Loading statements...</div>
             <div id="statements-body" class="statements-body"></div>
         </div>
     </div>
@@ -317,6 +324,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=6"></script>
+    <script src="app.js"></script>
 </body>
 </html>

@@ -76,6 +76,7 @@ export class FinTerminal {
     private statementsCurrencyCode: string | null = null;
     private statementsCurrencySymbol: string | null = null;
     private statementsUsdRate: number | null = null;
+    private statementsPeriodMode: 'annual' | 'quarterly' = 'annual';
     private currentTab: 'income' | 'balance' | 'cashflow' = 'income';
     private currentSymbol: string | null = null;
     private chart: ReturnType<typeof LightweightCharts.createChart> | null = null;
@@ -607,6 +608,7 @@ export class FinTerminal {
         const closeBtn = document.getElementById('statements-modal-close');
         const overlay = this.statementsModal.querySelector('.modal-overlay');
         const toggleBtn = document.getElementById('statements-currency-toggle');
+        const periodTabs = this.statementsModal.querySelectorAll('.stmt-period-tab');
 
         statementsBtn?.addEventListener('click', () => this.openStatementsModal());
         closeBtn?.addEventListener('click', () => this.closeStatementsModal());
@@ -620,6 +622,19 @@ export class FinTerminal {
                 this.currentTab = tabName;
                 this.statementsModal.querySelectorAll('.stmt-tab').forEach((t) => t.classList.remove('active'));
                 target.classList.add('active');
+                if (this.statementsData) {
+                    this.renderStatements(this.statementsData);
+                }
+            });
+        });
+
+        periodTabs.forEach((tab) => {
+            tab.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const mode = target.dataset.period as 'annual' | 'quarterly' | undefined;
+                if (!mode) return;
+                this.statementsPeriodMode = mode;
+                this.updateStatementsPeriodUI();
                 if (this.statementsData) {
                     this.renderStatements(this.statementsData);
                 }
@@ -1467,7 +1482,9 @@ export class FinTerminal {
         this.statementsCurrencyCode = null;
         this.statementsCurrencySymbol = null;
         this.statementsUsdRate = null;
+        this.statementsPeriodMode = 'annual';
         this.updateStatementsCurrencyUI();
+        this.updateStatementsPeriodUI();
 
         this.statementsModal.classList.remove('hidden');
 
@@ -1509,7 +1526,6 @@ export class FinTerminal {
     }
 
     private updateStatementsCurrencyUI(): void {
-        const subtitleEl = document.getElementById('statements-currency-subtitle');
         const metaEl = document.getElementById('statements-currency-meta');
         const noteEl = document.getElementById('statements-currency-note');
         const toggleBtn = document.getElementById('statements-currency-toggle') as HTMLButtonElement | null;
@@ -1518,10 +1534,6 @@ export class FinTerminal {
         const currencyCode = this.statementsCurrencyCode;
         const currencySymbol = this.statementsCurrencySymbol;
         const hasCurrency = Boolean(currencyCode && currencySymbol);
-
-        if (subtitleEl) {
-            subtitleEl.textContent = hasCurrency ? `Currency: ${currencyCode} (${currencySymbol})` : '';
-        }
 
         if (metaEl) {
             metaEl.classList.toggle('hidden', !hasCurrency);
@@ -1558,6 +1570,14 @@ export class FinTerminal {
         }
     }
 
+    private updateStatementsPeriodUI(): void {
+        this.statementsModal.querySelectorAll('.stmt-period-tab').forEach((tab) => {
+            const target = tab as HTMLElement;
+            const mode = target.dataset.period;
+            target.classList.toggle('active', mode === this.statementsPeriodMode);
+        });
+    }
+
     private renderStatements(data: FinancialStatements): void {
         const bodyEl = document.getElementById('statements-body');
         if (!bodyEl) return;
@@ -1571,6 +1591,7 @@ export class FinTerminal {
         const usdRate = this.statementsUsdRate ?? 1;
         const fmtStmtValue = (val: number | null): string =>
             formatStatementValue(useUsd && val !== null ? val * usdRate : val, currencySymbol);
+        const useQuarterly = this.statementsPeriodMode === 'quarterly';
 
         const hasData = (values: (number | null)[]): boolean => {
             return values.some(v => v !== null && v !== undefined && v !== 0);
@@ -1590,7 +1611,9 @@ export class FinTerminal {
         let html = '';
 
         if (this.currentTab === 'income') {
-            const statements = data.income_statements;
+            const statements = useQuarterly
+                ? data.income_statements_quarterly
+                : data.income_statements;
             if (statements.length === 0) {
                 html = '<div class="ratios-loading">No income statement data available</div>';
             } else {
@@ -1624,7 +1647,9 @@ export class FinTerminal {
                 `;
             }
         } else if (this.currentTab === 'balance') {
-            const statements = data.balance_sheets;
+            const statements = useQuarterly
+                ? data.balance_sheets_quarterly
+                : data.balance_sheets;
             if (statements.length === 0) {
                 html = '<div class="ratios-loading">No balance sheet data available</div>';
             } else {
@@ -1684,7 +1709,9 @@ export class FinTerminal {
                 }
             }
         } else if (this.currentTab === 'cashflow') {
-            const statements = data.cash_flows;
+            const statements = useQuarterly
+                ? data.cash_flows_quarterly
+                : data.cash_flows;
             if (statements.length === 0) {
                 html = '<div class="ratios-loading">No cash flow data available</div>';
             } else {

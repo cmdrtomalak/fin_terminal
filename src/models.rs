@@ -127,6 +127,9 @@ pub struct FinancialStatements {
     pub income_statements: Vec<IncomeStatement>,
     pub balance_sheets: Vec<BalanceSheet>,
     pub cash_flows: Vec<CashFlow>,
+    pub income_statements_quarterly: Vec<IncomeStatement>,
+    pub balance_sheets_quarterly: Vec<BalanceSheet>,
+    pub cash_flows_quarterly: Vec<CashFlow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
