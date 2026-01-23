@@ -22,14 +22,31 @@ export function formatTime(timestamp: string): string {
     return date.toLocaleDateString();
 }
 
-export function formatStatementValue(val: number | null): string {
+export function getCurrencySymbol(code: string): string {
+    if (!code) return '$';
+    try {
+        const parts = new Intl.NumberFormat('en', {
+            style: 'currency',
+            currency: code,
+            currencyDisplay: 'narrowSymbol',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        }).formatToParts(0);
+        const currencyPart = parts.find((part) => part.type === 'currency');
+        return currencyPart?.value || code;
+    } catch {
+        return code;
+    }
+}
+
+export function formatStatementValue(val: number | null, currencySymbol: string = '$'): string {
     if (val === null || val === undefined || isNaN(val)) return '—';
     const absVal = Math.abs(val);
     const sign = val < 0 ? '-' : '';
-    if (absVal >= 1_000_000_000) return sign + '$' + (absVal / 1_000_000_000).toFixed(1) + 'B';
-    if (absVal >= 1_000_000) return sign + '$' + (absVal / 1_000_000).toFixed(1) + 'M';
-    if (absVal >= 1_000) return sign + '$' + (absVal / 1_000).toFixed(1) + 'K';
-    return sign + '$' + absVal.toFixed(0);
+    if (absVal >= 1_000_000_000) return sign + currencySymbol + (absVal / 1_000_000_000).toFixed(1) + 'B';
+    if (absVal >= 1_000_000) return sign + currencySymbol + (absVal / 1_000_000).toFixed(1) + 'M';
+    if (absVal >= 1_000) return sign + currencySymbol + (absVal / 1_000).toFixed(1) + 'K';
+    return sign + currencySymbol + absVal.toFixed(0);
 }
 
 export function formatRatioValue(

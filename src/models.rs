@@ -121,6 +121,9 @@ pub struct IndexQuote {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinancialStatements {
     pub symbol: String,
+    pub currency: Option<String>,
+    pub usd_fx_rate: Option<f64>,
+    pub usd_fx_pair: Option<String>,
     pub income_statements: Vec<IncomeStatement>,
     pub balance_sheets: Vec<BalanceSheet>,
     pub cash_flows: Vec<CashFlow>,

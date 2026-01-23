@@ -97,6 +97,7 @@ struct QuoteSummaryInner {
 struct QuoteSummaryResult {
     default_key_statistics: Option<DefaultKeyStatistics>,
     financial_data: Option<FinancialData>,
+    price: Option<PriceData>,
     summary_detail: Option<SummaryDetail>,
 }
 
@@ -129,6 +130,7 @@ struct DefaultKeyStatistics {
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 struct FinancialData {
+    financial_currency: Option<String>,
     total_cash: Option<YahooValue>,
     total_debt: Option<YahooValue>,
     total_revenue: Option<YahooValue>,
@@ -145,6 +147,13 @@ struct FinancialData {
     operating_cashflow: Option<YahooValue>,
     free_cashflow: Option<YahooValue>,
     revenue_growth: Option<YahooValue>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PriceData {
+    currency: Option<String>,
+    financial_currency: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -416,6 +425,98 @@ impl YahooClient {
         })
     }
 
+    async fn fetch_chart_price(&self, symbol: &str) -> Result<Option<f64>, reqwest::Error> {
+        let url = format!(
+            "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=1d",
+            urlencoding::encode(symbol)
+        );
+
+        let response = self.client.get(&url).send().await?;
+        let data: YahooChartResponse = response.json().await?;
+
+        let price = data
+            .chart
+            .result
+            .and_then(|results| results.into_iter().next())
+            .and_then(|result| {
+                result
+                    .meta
+                    .regular_market_price
+                    .or(result.meta.previous_close)
+                    .or(result.meta.chart_previous_close)
+            });
+
+        Ok(price)
+    }
+
+    async fn get_reporting_currency(&self, symbol: &str) -> Result<Option<String>, reqwest::Error> {
+        let crumb = self.get_crumb().await?;
+        let modules = "price,financialData";
+        let url = format!(
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{}?modules={}&crumb={}",
+            urlencoding::encode(symbol),
+            modules,
+            urlencoding::encode(&crumb)
+        );
+
+        let response = self.client.get(&url).send().await?;
+
+        if !response.status().is_success() {
+            self.invalidate_crumb().await;
+            return Ok(None);
+        }
+
+        let data: YahooQuoteSummaryResponse = match response.json().await {
+            Ok(d) => d,
+            Err(_) => {
+                self.invalidate_crumb().await;
+                return Ok(None);
+            }
+        };
+
+        let currency = data
+            .quote_summary
+            .result
+            .and_then(|results| results.into_iter().next())
+            .and_then(|result| {
+                let QuoteSummaryResult {
+                    financial_data,
+                    price,
+                    ..
+                } = result;
+                let financial_currency = financial_data.and_then(|data| data.financial_currency);
+                let price_currency =
+                    price.and_then(|price| price.financial_currency.or(price.currency));
+                financial_currency.or(price_currency)
+            })
+            .map(|code| code.to_uppercase());
+
+        Ok(currency)
+    }
+
+    async fn get_fx_rate_to_usd(&self, currency: &str) -> Option<(f64, String)> {
+        if currency.eq_ignore_ascii_case("USD") {
+            return None;
+        }
+
+        let code = currency.trim().to_uppercase();
+        let direct_pair = format!("{}USD=X", code);
+        if let Ok(Some(price)) = self.fetch_chart_price(&direct_pair).await {
+            if price > 0.0 {
+                return Some((price, direct_pair));
+            }
+        }
+
+        let inverse_pair = format!("USD{}=X", code);
+        if let Ok(Some(price)) = self.fetch_chart_price(&inverse_pair).await {
+            if price > 0.0 {
+                return Some((1.0 / price, inverse_pair));
+            }
+        }
+
+        None
+    }
+
     pub async fn get_financials(
         &self,
         symbol: &str,
@@ -470,6 +571,7 @@ impl YahooClient {
                 });
 
                 let fin = r.financial_data.unwrap_or(FinancialData {
+                    financial_currency: None,
                     total_cash: None,
                     total_debt: None,
                     total_revenue: None,
@@ -903,8 +1005,25 @@ impl YahooClient {
             })
             .collect();
 
+        let currency = match self.get_reporting_currency(symbol).await {
+            Ok(Some(code)) => Some(code),
+            _ => None,
+        };
+
+        let (usd_fx_rate, usd_fx_pair) = if let Some(code) = currency.as_deref() {
+            self.get_fx_rate_to_usd(code)
+                .await
+                .map(|(rate, pair)| (Some(rate), Some(pair)))
+                .unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
+
         Ok(Some(FinancialStatements {
             symbol: symbol.to_string(),
+            currency,
+            usd_fx_rate,
+            usd_fx_pair,
             income_statements,
             balance_sheets,
             cash_flows,

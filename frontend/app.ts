@@ -2,6 +2,7 @@ import {
     formatNumber,
     formatMarketCap,
     formatTime,
+    getCurrencySymbol,
     formatStatementValue,
     formatRatioValue,
     getValueClass,
@@ -175,6 +176,9 @@ interface CashFlow {
 
 interface FinancialStatements {
     symbol: string;
+    currency?: string | null;
+    usd_fx_rate?: number | null;
+    usd_fx_pair?: string | null;
     income_statements: IncomeStatement[];
     balance_sheets: BalanceSheet[];
     cash_flows: CashFlow[];
@@ -294,6 +298,10 @@ class FinTerminal {
     private currentBondCountryCode: string | null = null;
     private currentBondYears: number = 10;
     private statementsData: FinancialStatements | null = null;
+    private statementsCurrencyMode: 'local' | 'usd' = 'local';
+    private statementsCurrencyCode: string | null = null;
+    private statementsCurrencySymbol: string | null = null;
+    private statementsUsdRate: number | null = null;
     private currentTab: 'income' | 'balance' | 'cashflow' = 'income';
     private currentSymbol: string | null = null;
     private chart: ReturnType<typeof LightweightCharts.createChart> | null = null;
@@ -824,10 +832,12 @@ class FinTerminal {
         const statementsBtn = document.getElementById('statements-btn');
         const closeBtn = document.getElementById('statements-modal-close');
         const overlay = this.statementsModal.querySelector('.modal-overlay');
+        const toggleBtn = document.getElementById('statements-currency-toggle');
 
         statementsBtn?.addEventListener('click', () => this.openStatementsModal());
         closeBtn?.addEventListener('click', () => this.closeStatementsModal());
         overlay?.addEventListener('click', () => this.closeStatementsModal());
+        toggleBtn?.addEventListener('click', () => this.toggleStatementsCurrency());
 
         this.statementsModal.querySelectorAll('.stmt-tab').forEach((tab) => {
             tab.addEventListener('click', (e) => {
@@ -1679,13 +1689,21 @@ class FinTerminal {
         if (loadingEl) loadingEl.style.display = 'block';
         if (bodyEl) bodyEl.innerHTML = '';
 
+        this.statementsCurrencyMode = 'local';
+        this.statementsCurrencyCode = null;
+        this.statementsCurrencySymbol = null;
+        this.statementsUsdRate = null;
+        this.updateStatementsCurrencyUI();
+
         this.statementsModal.classList.remove('hidden');
 
         try {
             const response = await fetch(`/api/statements/${this.currentSymbol}`);
             if (!response.ok) throw new Error('Failed to fetch');
-            this.statementsData = await response.json();
-            this.renderStatements(this.statementsData!);
+            const statements: FinancialStatements = await response.json();
+            this.statementsData = statements;
+            this.setStatementsCurrencyMeta(statements);
+            this.renderStatements(statements);
         } catch {
             if (bodyEl) bodyEl.innerHTML = '<div class="ratios-loading">Failed to load financial statements</div>';
         } finally {
@@ -1697,11 +1715,88 @@ class FinTerminal {
         this.statementsModal.classList.add('hidden');
     }
 
+    private setStatementsCurrencyMeta(data: FinancialStatements): void {
+        const code = (data.currency || 'USD').toUpperCase();
+        this.statementsCurrencyCode = code;
+        this.statementsCurrencySymbol = getCurrencySymbol(code);
+        this.statementsUsdRate = data.usd_fx_rate ?? null;
+    }
+
+    private toggleStatementsCurrency(): void {
+        if (!this.statementsData || !this.statementsCurrencyCode) return;
+        if (!this.statementsUsdRate || this.statementsCurrencyCode === 'USD') return;
+        this.statementsCurrencyMode = this.statementsCurrencyMode === 'local' ? 'usd' : 'local';
+        this.renderStatements(this.statementsData);
+    }
+
+    private formatFxRate(rate: number): string {
+        if (rate < 0.01) return rate.toFixed(6);
+        return rate.toFixed(4);
+    }
+
+    private updateStatementsCurrencyUI(): void {
+        const subtitleEl = document.getElementById('statements-currency-subtitle');
+        const metaEl = document.getElementById('statements-currency-meta');
+        const noteEl = document.getElementById('statements-currency-note');
+        const toggleBtn = document.getElementById('statements-currency-toggle') as HTMLButtonElement | null;
+        const rateEl = document.getElementById('statements-currency-rate');
+
+        const currencyCode = this.statementsCurrencyCode;
+        const currencySymbol = this.statementsCurrencySymbol;
+        const hasCurrency = Boolean(currencyCode && currencySymbol);
+
+        if (subtitleEl) {
+            subtitleEl.textContent = hasCurrency ? `Currency: ${currencyCode} (${currencySymbol})` : '';
+        }
+
+        if (metaEl) {
+            metaEl.classList.toggle('hidden', !hasCurrency);
+        }
+
+        if (!hasCurrency) {
+            if (noteEl) noteEl.textContent = '';
+            if (toggleBtn) toggleBtn.style.display = 'none';
+            if (rateEl) rateEl.textContent = '';
+            return;
+        }
+
+        const isUsdMode = this.statementsCurrencyMode === 'usd';
+        const displayCode = isUsdMode ? 'USD' : currencyCode!;
+        const displaySymbol = isUsdMode ? '$' : currencySymbol!;
+        if (noteEl) noteEl.textContent = `All figures in ${displayCode} (${displaySymbol})`;
+
+        const canConvert = Boolean(this.statementsUsdRate) && currencyCode !== 'USD';
+        if (toggleBtn) {
+            toggleBtn.style.display = canConvert ? 'inline-flex' : 'none';
+            if (canConvert) {
+                toggleBtn.textContent = isUsdMode ? `View in ${currencyCode}` : 'Convert to USD';
+            }
+        }
+
+        if (rateEl) {
+            if (isUsdMode && canConvert && this.statementsUsdRate) {
+                rateEl.textContent = `Rate: 1 ${currencyCode} = ${this.formatFxRate(this.statementsUsdRate)} USD`;
+                rateEl.classList.remove('hidden');
+            } else {
+                rateEl.textContent = '';
+                rateEl.classList.add('hidden');
+            }
+        }
+    }
+
     private renderStatements(data: FinancialStatements): void {
         const bodyEl = document.getElementById('statements-body');
         if (!bodyEl) return;
 
-        const fmtStmtValue = (val: number | null): string => formatStatementValue(val);
+        if (!this.statementsCurrencyCode || !this.statementsCurrencySymbol) {
+            this.setStatementsCurrencyMeta(data);
+        }
+
+        const useUsd = this.statementsCurrencyMode === 'usd' && this.statementsUsdRate !== null;
+        const currencySymbol = useUsd ? '$' : (this.statementsCurrencySymbol || '$');
+        const usdRate = this.statementsUsdRate ?? 1;
+        const fmtStmtValue = (val: number | null): string =>
+            formatStatementValue(useUsd && val !== null ? val * usdRate : val, currencySymbol);
 
         const hasData = (values: (number | null)[]): boolean => {
             return values.some(v => v !== null && v !== undefined && v !== 0);
@@ -1710,7 +1805,12 @@ class FinTerminal {
         const renderRow = (label: string, values: (number | null)[], highlight = false): string => {
             if (!hasData(values)) return '';
             const rowClass = highlight ? ' class="stmt-highlight"' : '';
-            return `<tr${rowClass}><td>${label}</td>${values.map(v => `<td class="${getValueClass(v)}">${fmtStmtValue(v)}</td>`).join('')}</tr>`;
+            const displayValues = useUsd
+                ? values.map((value) => (value === null ? null : value * usdRate))
+                : values;
+            return `<tr${rowClass}><td>${label}</td>${displayValues
+                .map((value) => `<td class="${getValueClass(value)}">${fmtStmtValue(value)}</td>`)
+                .join('')}</tr>`;
         };
 
         let html = '';
@@ -1871,6 +1971,7 @@ class FinTerminal {
         }
 
         bodyEl.innerHTML = html;
+        this.updateStatementsCurrencyUI();
     }
 
     private handleKeydown(e: KeyboardEvent): void {
