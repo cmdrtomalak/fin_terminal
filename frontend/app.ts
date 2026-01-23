@@ -208,7 +208,8 @@ interface TreasuryHistory {
 interface InternationalBondYield {
     country: string;
     country_code: string;
-    yield_10y: number;
+    maturity: string;
+    yield_value: number;
     change: number;
     change_percent: number;
     date: string;
@@ -1209,9 +1210,9 @@ class FinTerminal {
             const changeClass = bond.change >= 0 ? 'positive' : 'negative';
             const sign = bond.change >= 0 ? '+' : '';
             const freqClass = bond.data_frequency === 'daily' ? 'freq-daily' : 'freq-monthly';
-            const hasHistory = !noHistoryCountries.includes(bond.country_code);
+            const hasHistory = !noHistoryCountries.includes(bond.country_code) && bond.maturity === '10Y';
             const clickableClass = hasHistory ? 'clickable' : '';
-            const titleAttr = hasHistory ? '' : 'title="Historical chart not available"';
+            const titleAttr = hasHistory ? '' : (bond.maturity !== '10Y' ? '' : 'title="Historical chart not available"');
             return `
                 <div class="bonds-row ${clickableClass}" data-country="${bond.country}" data-country-code="${bond.country_code}" ${titleAttr}>
                     <div class="bonds-info">
@@ -1219,7 +1220,7 @@ class FinTerminal {
                         <span class="bonds-code">${bond.country_code}</span>
                     </div>
                     <div class="bonds-data">
-                        <span class="bonds-yield">${bond.yield_10y.toFixed(2)}%</span>
+                        <span class="bonds-yield">${bond.yield_value.toFixed(2)}%</span>
                         <span class="bonds-change ${changeClass}">${sign}${bond.change.toFixed(2)}</span>
                         <span class="bonds-pct ${changeClass}">${sign}${bond.change_percent.toFixed(2)}%</span>
                     </div>
@@ -1227,16 +1228,29 @@ class FinTerminal {
             `;
         };
 
-        let html = `
-            <div class="bonds-section">
-                <div class="bonds-header">
-                    <span>Country</span>
-                    <span>10Y Yield</span>
-                    <span>Chg</span>
-                    <span>Chg %</span>
+        const bonds10Y = data.bonds.filter(b => b.maturity === '10Y');
+        const bonds20Y = data.bonds.filter(b => b.maturity === '20Y');
+        const bonds30Y = data.bonds.filter(b => b.maturity === '30Y');
+
+        const renderSection = (maturity: string, bonds: InternationalBondYield[]): string => {
+            if (bonds.length === 0) return '';
+            return `
+                <div class="bonds-section">
+                    <div class="bonds-header">
+                        <span>Country</span>
+                        <span>${maturity} Yield</span>
+                        <span>Chg</span>
+                        <span>Chg %</span>
+                    </div>
+                    ${bonds.map(renderBondRow).join('')}
                 </div>
-                ${data.bonds.map(renderBondRow).join('')}
-            </div>
+            `;
+        };
+
+        let html = `
+            ${renderSection('10Y', bonds10Y)}
+            ${renderSection('20Y', bonds20Y)}
+            ${renderSection('30Y', bonds30Y)}
             <div class="bonds-legend">
                 <span class="bonds-freq freq-daily"></span> Daily
                 <span class="bonds-freq freq-monthly" style="margin-left: 8px;"></span> Monthly

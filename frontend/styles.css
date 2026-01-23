@@ -1056,7 +1056,7 @@ body {
 
 .treasury-header {
     display: flex;
-    justify-content: space-between;
+    gap: 15px;
     padding: 6px 0;
     border-bottom: 1px solid var(--bb-border);
     font-size: 11px;
@@ -1065,9 +1065,28 @@ body {
     margin-bottom: 4px;
 }
 
+.treasury-header span:first-child {
+    width: 120px;
+}
+
+.treasury-header span:nth-child(2) {
+    width: 80px;
+    text-align: right;
+}
+
+.treasury-header span:nth-child(3) {
+    width: 80px;
+    text-align: right;
+}
+
+.treasury-header span:nth-child(4) {
+    width: 80px;
+    text-align: right;
+}
+
 .treasury-row {
     display: flex;
-    justify-content: space-between;
+    gap: 15px;
     align-items: center;
     padding: 8px 0;
     border-bottom: 1px solid var(--bb-border);
@@ -1081,8 +1100,7 @@ body {
     font-size: 11px;
     color: var(--bb-yellow);
     font-weight: bold;
-    flex: 1;
-    min-width: 120px;
+    width: 120px;
 }
 
 .treasury-yield {
@@ -1211,11 +1229,11 @@ body {
 
 /* International Bonds Modal */
 .bonds-modal-content {
-    max-width: 700px;
+    max-width: 840px;
 }
 
 .bonds-body {
-    max-height: 60vh;
+    max-height: 72vh;
     overflow-y: auto;
 }
 
@@ -1234,7 +1252,7 @@ body {
 
 .bonds-header {
     display: flex;
-    justify-content: space-between;
+    gap: 15px;
     padding: 6px 0;
     border-bottom: 1px solid var(--bb-border);
     font-size: 11px;
@@ -1243,9 +1261,28 @@ body {
     margin-bottom: 4px;
 }
 
+.bonds-header span:first-child {
+    width: 140px;
+}
+
+.bonds-header span:nth-child(2) {
+    width: 80px;
+    text-align: right;
+}
+
+.bonds-header span:nth-child(3) {
+    width: 70px;
+    text-align: right;
+}
+
+.bonds-header span:nth-child(4) {
+    width: 70px;
+    text-align: right;
+}
+
 .bonds-row {
     display: flex;
-    justify-content: space-between;
+    gap: 15px;
     align-items: center;
     padding: 10px 0;
     border-bottom: 1px solid var(--bb-border);
@@ -1268,7 +1305,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    flex: 1;
+    width: 140px;
 }
 
 .bonds-country {

@@ -218,7 +218,8 @@ pub struct TreasuryHistory {
 pub struct InternationalBondYield {
     pub country: String,
     pub country_code: String,
-    pub yield_10y: f64,
+    pub maturity: String,
+    pub yield_value: f64,
     pub change: f64,
     pub change_percent: f64,
     pub date: String,

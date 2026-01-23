@@ -22,6 +22,55 @@ struct CountryConfig {
     history_series: &'static str,
 }
 
+const US_20Y_SERIES: &str = "DGS20";
+const US_30Y_SERIES: &str = "DGS30";
+
+struct CnbcConfig {
+    country_name: &'static str,
+    country_code: &'static str,
+    symbol_20y: Option<&'static str>,
+    symbol_30y: Option<&'static str>,
+}
+
+const CNBC_COUNTRIES: &[CnbcConfig] = &[
+    CnbcConfig {
+        country_name: "United Kingdom",
+        country_code: "GB",
+        symbol_20y: Some("GB20Y"),
+        symbol_30y: Some("GB30Y"),
+    },
+    CnbcConfig {
+        country_name: "Germany",
+        country_code: "DE",
+        symbol_20y: Some("DE20Y"),
+        symbol_30y: Some("DE30Y"),
+    },
+    CnbcConfig {
+        country_name: "France",
+        country_code: "FR",
+        symbol_20y: Some("FR20Y-FR"),
+        symbol_30y: Some("FR30Y-FR"),
+    },
+    CnbcConfig {
+        country_name: "Italy",
+        country_code: "IT",
+        symbol_20y: Some("IT20Y-IT"),
+        symbol_30y: Some("IT30Y-IT"),
+    },
+    CnbcConfig {
+        country_name: "Japan",
+        country_code: "JP",
+        symbol_20y: Some("JP20Y-JP"),
+        symbol_30y: Some("JP30Y-JP"),
+    },
+    CnbcConfig {
+        country_name: "Canada",
+        country_code: "CA",
+        symbol_20y: Some("CA20Y"),
+        symbol_30y: Some("CA30Y"),
+    },
+];
+
 const COUNTRIES: &[CountryConfig] = &[
     CountryConfig {
         name: "United States",
@@ -134,21 +183,79 @@ impl BondsClient {
 
         tracing::info!("Fetching international bond yields (hybrid sources)");
 
-        let mut bonds: Vec<InternationalBondYield> = Vec::new();
+        let mut bonds_10y: Vec<InternationalBondYield> = Vec::new();
+        let mut bonds_20y: Vec<InternationalBondYield> = Vec::new();
+        let mut bonds_30y: Vec<InternationalBondYield> = Vec::new();
 
         for country in COUNTRIES {
-            match self.fetch_latest_yield(country).await {
-                Ok(bond) => bonds.push(bond),
+            match self.fetch_latest_yield(country, "10Y").await {
+                Ok(bond) => bonds_10y.push(bond),
                 Err(e) => {
-                    tracing::warn!("Failed to fetch {} bond yield: {}", country.name, e);
+                    tracing::warn!("Failed to fetch {} 10Y bond yield: {}", country.name, e);
                 }
             }
         }
 
+        if let Ok(bond) = self.fetch_us_yield(US_20Y_SERIES, "20Y").await {
+            bonds_20y.push(bond);
+        }
+
+        if let Ok(bond) = self.fetch_us_yield(US_30Y_SERIES, "30Y").await {
+            bonds_30y.push(bond);
+        }
+
+        for config in CNBC_COUNTRIES {
+            if let Some(symbol_20y) = config.symbol_20y {
+                match self
+                    .fetch_cnbc_yield(
+                        symbol_20y,
+                        config.country_name,
+                        config.country_code,
+                        "20Y",
+                    )
+                    .await
+                {
+                    Ok(bond) => bonds_20y.push(bond),
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to fetch {} 20Y bond yield: {}",
+                            config.country_name,
+                            e
+                        );
+                    }
+                }
+            }
+
+            if let Some(symbol_30y) = config.symbol_30y {
+                match self
+                    .fetch_cnbc_yield(
+                        symbol_30y,
+                        config.country_name,
+                        config.country_code,
+                        "30Y",
+                    )
+                    .await
+                {
+                    Ok(bond) => bonds_30y.push(bond),
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to fetch {} 30Y bond yield: {}",
+                            config.country_name,
+                            e
+                        );
+                    }
+                }
+            }
+        }
+
+        let mut bonds = bonds_10y;
+        bonds.extend(bonds_20y);
+        bonds.extend(bonds_30y);
+
         let result = InternationalBonds {
             bonds,
             updated_at: chrono::Utc::now().to_rfc3339(),
-            data_delay: "US/CA: daily (1-2 day delay), Others: monthly".to_string(),
+            data_delay: "10Y: FRED/BoC (1-2 day delay), 20Y/30Y: CNBC (real-time)".to_string(),
         };
 
         {
@@ -162,20 +269,66 @@ impl BondsClient {
         Ok(result)
     }
 
+    async fn fetch_us_yield(
+        &self,
+        series_id: &str,
+        maturity: &str,
+    ) -> Result<InternationalBondYield, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!(
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id={}",
+            series_id
+        );
+
+        let response = self.client.get(&url).send().await?;
+        if !response.status().is_success() {
+            return Err(format!("FRED API returned status: {}", response.status()).into());
+        }
+
+        let text = response.text().await?;
+        let lines: Vec<&str> = text.lines().filter(|l| !l.is_empty()).collect();
+
+        if lines.len() < 3 {
+            return Err("Not enough data points".into());
+        }
+
+        let (date, yield_rate) = self.parse_fred_line_reverse(&lines)?;
+        let (_, prev_yield) = self.parse_fred_line_at(&lines, lines.len() - 2)?;
+
+        let change = yield_rate - prev_yield;
+        let change_percent = if prev_yield > 0.0 {
+            (change / prev_yield) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(InternationalBondYield {
+            country: "United States".to_string(),
+            country_code: "US".to_string(),
+            maturity: maturity.to_string(),
+            yield_value: yield_rate,
+            change,
+            change_percent,
+            date,
+            data_frequency: "daily".to_string(),
+        })
+    }
+
     async fn fetch_latest_yield(
         &self,
         country: &CountryConfig,
+        maturity: &str,
     ) -> Result<InternationalBondYield, Box<dyn std::error::Error + Send + Sync>> {
         match country.source {
-            DataSource::FredDaily | DataSource::FredMonthly => self.fetch_fred_yield(country).await,
-            DataSource::BankOfCanada => self.fetch_boc_yield(country).await,
-            DataSource::InvestingComScrape => self.fetch_investing_com_yield(country).await,
+            DataSource::FredDaily | DataSource::FredMonthly => self.fetch_fred_yield(country, maturity).await,
+            DataSource::BankOfCanada => self.fetch_boc_yield(country, maturity).await,
+            DataSource::InvestingComScrape => self.fetch_investing_com_yield(country, maturity).await,
         }
     }
 
     async fn fetch_fred_yield(
         &self,
         country: &CountryConfig,
+        maturity: &str,
     ) -> Result<InternationalBondYield, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
             "https://fred.stlouisfed.org/graph/fredgraph.csv?id={}",
@@ -214,7 +367,8 @@ impl BondsClient {
         Ok(InternationalBondYield {
             country: country.name.to_string(),
             country_code: country.code.to_string(),
-            yield_10y: yield_rate,
+            maturity: maturity.to_string(),
+            yield_value: yield_rate,
             change,
             change_percent,
             date,
@@ -250,6 +404,7 @@ impl BondsClient {
     async fn fetch_boc_yield(
         &self,
         country: &CountryConfig,
+        maturity: &str,
     ) -> Result<InternationalBondYield, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
             "https://www.bankofcanada.ca/valet/observations/{}/json?recent=5",
@@ -295,7 +450,8 @@ impl BondsClient {
         Ok(InternationalBondYield {
             country: country.name.to_string(),
             country_code: country.code.to_string(),
-            yield_10y: yield_rate,
+            maturity: maturity.to_string(),
+            yield_value: yield_rate,
             change,
             change_percent,
             date,
@@ -306,6 +462,7 @@ impl BondsClient {
     async fn fetch_investing_com_yield(
         &self,
         country: &CountryConfig,
+        maturity: &str,
     ) -> Result<InternationalBondYield, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
             "https://www.investing.com/rates-bonds/{}",
@@ -336,12 +493,71 @@ impl BondsClient {
         Ok(InternationalBondYield {
             country: country.name.to_string(),
             country_code: country.code.to_string(),
-            yield_10y: yield_rate,
+            maturity: maturity.to_string(),
+            yield_value: yield_rate,
             change,
             change_percent,
             date,
             data_frequency: "daily".to_string(),
         })
+    }
+
+    async fn fetch_cnbc_yield(
+        &self,
+        symbol: &str,
+        country_name: &str,
+        country_code: &str,
+        maturity: &str,
+    ) -> Result<InternationalBondYield, Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!("https://www.cnbc.com/quotes/{}", symbol);
+
+        let response = self.client.get(&url).send().await?;
+        if !response.status().is_success() {
+            return Err(format!("CNBC returned status: {}", response.status()).into());
+        }
+
+        let html = response.text().await?;
+
+        let yield_rate = self.extract_cnbc_value(&html, r#""last":"([0-9.]+)"#)?;
+        let change = self
+            .extract_cnbc_value(&html, r#""change":"(-?[0-9.]+)"#)
+            .unwrap_or(0.0);
+        let prev_close = self
+            .extract_cnbc_value(&html, r#""previous_day_closing":"([0-9.]+)"#)
+            .unwrap_or(yield_rate);
+
+        let change_percent = if prev_close > 0.0 {
+            (change / prev_close) * 100.0
+        } else {
+            0.0
+        };
+
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+        Ok(InternationalBondYield {
+            country: country_name.to_string(),
+            country_code: country_code.to_string(),
+            maturity: maturity.to_string(),
+            yield_value: yield_rate,
+            change,
+            change_percent,
+            date,
+            data_frequency: "daily".to_string(),
+        })
+    }
+
+    fn extract_cnbc_value(
+        &self,
+        html: &str,
+        pattern: &str,
+    ) -> Result<f64, Box<dyn std::error::Error + Send + Sync>> {
+        let re = regex::Regex::new(pattern)?;
+        if let Some(caps) = re.captures(html) {
+            if let Some(m) = caps.get(1) {
+                return m.as_str().parse::<f64>().map_err(|e| e.into());
+            }
+        }
+        Err("Value not found".into())
     }
 
     fn extract_investing_value(
