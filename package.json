@@ -3,7 +3,8 @@
     "version": "1.0.0",
     "type": "module",
     "scripts": {
-        "build": "esbuild frontend/app.ts --bundle --outfile=frontend/app.js --format=iife --target=es2020 --minify",
+        "build": "bun run build:frontend",
+        "build:frontend": "esbuild frontend/app.ts --bundle --outfile=frontend/app.js --format=iife --target=es2020 --minify",
         "watch": "esbuild frontend/app.ts --bundle --outfile=frontend/app.js --format=iife --target=es2020 --watch",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",

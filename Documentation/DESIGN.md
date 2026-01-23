@@ -401,9 +401,9 @@ Terminal aesthetic with amber-on-black theme:
 
 ```bash
 # Frontend
-npm install              # Install esbuild, typescript
-npm run build            # Compile app.ts → app.js
-npm run watch            # Development mode with auto-rebuild
+bun install              # Install esbuild, typescript
+bun run build            # Compile app.ts → app.js
+bun run watch            # Development mode with auto-rebuild
 
 # Backend
 cargo build --release    # Compile Rust binary

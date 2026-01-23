@@ -22,10 +22,10 @@ A financial terminal web application built in Rust with real-time market data fr
 
 ```bash
 # Install frontend dependencies
-npm install
+bun install
 
 # Build TypeScript frontend
-npm run build
+bun run build
 
 # Build Rust backend (release mode)
 cargo build --release
@@ -47,7 +47,7 @@ Open http://localhost:8099 (or your custom port) in a browser.
 
 ```bash
 # Watch TypeScript changes
-npm run watch
+bun run watch
 
 # Run with debug logging
 RUST_LOG=debug cargo run
@@ -60,16 +60,16 @@ RUST_LOG=debug cargo run
 cargo test
 
 # Frontend unit & integration tests (38 tests)
-npm run test
+bun run test
 
 # Frontend E2E tests with Playwright (19 tests)
-npm run test:e2e
+bun run test:e2e
 
 # All frontend tests
-npm run test:all
+bun run test:all
 
 # Watch mode for unit tests
-npm run test:watch
+bun run test:watch
 ```
 
 **Total: 91 tests** covering API endpoints, utility functions, DOM rendering, and user flows.
