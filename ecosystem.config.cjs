@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'fin-terminal',
       script: 'bash',
-      args: '-lc "bun run build:frontend && cargo run --release"',
+      args: '-c "bun run build:frontend && cargo run --release"',
       env: {
         PORT: 3002,
         RUST_LOG: 'info',

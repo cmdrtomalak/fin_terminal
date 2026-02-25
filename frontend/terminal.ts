@@ -52,6 +52,7 @@ export class FinTerminal {
     private commoditiesModal: HTMLElement;
     private indexChartModal: HTMLElement;
     private commodityChartModal: HTMLElement;
+
     private treasuryChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
     private commodityChart: ReturnType<typeof LightweightCharts.createChart> | null = null;
     private commodityCandleSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addCandlestickSeries']> | null = null;
@@ -121,6 +122,7 @@ export class FinTerminal {
         this.setupBondsChartModal();
         this.setupCommoditiesModal();
         this.setupCommodityChartModal();
+        this.setupYchartModal();
         this.updateTime();
         this.loadQuickTickers();
         setInterval(() => this.updateTime(), 1000);
@@ -2101,6 +2103,18 @@ export class FinTerminal {
 
     private formatTime(timestamp: string): string {
         return formatTime(timestamp);
+    }
+
+    private setupYchartModal(): void {
+        const ychartBtn = document.querySelector('[data-fn="YCHART"]');
+        ychartBtn?.addEventListener('click', () => {
+            const symbol = this.currentSymbol || '';
+            const securities = symbol ? `id:${symbol},include:true,type:security,,` : '';
+            const calcs = symbol ? 'id:price,include:true,,' : '';
+            const partner = symbol ? 'fool_1015' : 'fool_720';
+            const url = `https://ycharts.com/charts/fund_chart_creator/fool/#/?aiSummaries=&calcs=${calcs}&chartId=&chartType=&correlations=&customGrowthAmount=&dataInLegend=value&dateSelection=range&displayDateRange=&endDate=&format=real&legendOnChart=false&lineAnnotations=&nameInLegend=name_and_ticker&note=&partner=${partner}&performanceDisclosure=false&quoteLegend=false&recessions=false&scaleType=linear&securities=${securities}&securityGroup=&securitylistName=&securitylistSecurityId=&source=false&splitType=single&startDate=&title=&units=false&useCustomColors=false&useEstimates=false&zoom=&hideValueFlags=false`;
+            window.open(url, '_blank');
+        });
     }
 }
 
