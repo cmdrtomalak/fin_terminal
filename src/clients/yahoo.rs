@@ -695,6 +695,9 @@ impl YahooClient {
 
                 FinancialRatios {
                     symbol: symbol.to_string(),
+                    currency: fin.financial_currency.clone(),
+                    usd_fx_rate: None,
+                    usd_fx_pair: None,
                     pe_ratio: summary.trailing_pe.and_then(|v| v.raw),
                     forward_pe: summary
                         .forward_pe
@@ -737,6 +740,18 @@ impl YahooClient {
                     payout_ratio: summary.payout_ratio.and_then(|v| v.raw),
                 }
             });
+
+        let ratios = if let Some(mut r) = ratios {
+            if let Some(ref code) = r.currency {
+                if let Some((rate, pair)) = self.get_fx_rate_to_usd(code).await {
+                    r.usd_fx_rate = Some(rate);
+                    r.usd_fx_pair = Some(pair);
+                }
+            }
+            Some(r)
+        } else {
+            None
+        };
 
         Ok(ratios)
     }

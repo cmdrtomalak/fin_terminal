@@ -79,6 +79,11 @@ export class FinTerminal {
     private statementsUsdRate: number | null = null;
     private statementsPeriodMode: 'annual' | 'quarterly' = 'annual';
     private currentTab: 'income' | 'balance' | 'cashflow' = 'income';
+    private ratiosData: FinancialRatios | null = null;
+    private ratiosCurrencyMode: 'local' | 'usd' = 'local';
+    private ratiosCurrencyCode: string | null = null;
+    private ratiosCurrencySymbol: string | null = null;
+    private ratiosUsdRate: number | null = null;
     private currentSymbol: string | null = null;
     private chart: ReturnType<typeof LightweightCharts.createChart> | null = null;
     private candleSeries: ReturnType<ReturnType<typeof LightweightCharts.createChart>['addCandlestickSeries']> | null = null;
@@ -207,6 +212,9 @@ export class FinTerminal {
         closeBtn?.addEventListener('click', () => this.closeRatiosModal());
         overlay?.addEventListener('click', () => this.closeRatiosModal());
 
+        const currencyToggle = document.getElementById('ratios-currency-toggle');
+        currencyToggle?.addEventListener('click', () => this.toggleRatiosCurrency());
+
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && !this.ratiosModal.classList.contains('hidden')) {
                 this.closeRatiosModal();
@@ -225,12 +233,20 @@ export class FinTerminal {
         if (loadingEl) loadingEl.style.display = 'block';
         if (bodyEl) bodyEl.innerHTML = '';
 
+        this.ratiosCurrencyMode = 'local';
+        this.ratiosCurrencyCode = null;
+        this.ratiosCurrencySymbol = null;
+        this.ratiosUsdRate = null;
+        this.ratiosData = null;
+
         this.ratiosModal.classList.remove('hidden');
 
         try {
             const response = await fetch(`/api/financials/${this.currentSymbol}`);
             if (!response.ok) throw new Error('Failed to fetch');
             const ratios: FinancialRatios = await response.json();
+            this.ratiosData = ratios;
+            this.setRatiosCurrencyMeta(ratios);
             this.renderRatios(ratios);
         } catch {
             if (bodyEl) bodyEl.innerHTML = '<div class="ratios-loading">Failed to load financial data</div>';
@@ -243,11 +259,81 @@ export class FinTerminal {
         this.ratiosModal.classList.add('hidden');
     }
 
+    private setRatiosCurrencyMeta(data: FinancialRatios): void {
+        const code = (data.currency || 'USD').toUpperCase();
+        this.ratiosCurrencyCode = code;
+        this.ratiosCurrencySymbol = getCurrencySymbol(code);
+        this.ratiosUsdRate = data.usd_fx_rate ?? null;
+    }
+
+    private toggleRatiosCurrency(): void {
+        if (!this.ratiosData || !this.ratiosCurrencyCode) return;
+        if (!this.ratiosUsdRate || this.ratiosCurrencyCode === 'USD') return;
+        this.ratiosCurrencyMode = this.ratiosCurrencyMode === 'local' ? 'usd' : 'local';
+        this.renderRatios(this.ratiosData);
+    }
+
+    private updateRatiosCurrencyUI(): void {
+        const metaEl = document.getElementById('ratios-currency-meta');
+        const noteEl = document.getElementById('ratios-currency-note');
+        const toggleBtn = document.getElementById('ratios-currency-toggle') as HTMLButtonElement | null;
+        const rateEl = document.getElementById('ratios-currency-rate');
+
+        const currencyCode = this.ratiosCurrencyCode;
+        const currencySymbol = this.ratiosCurrencySymbol;
+        const hasCurrency = Boolean(currencyCode && currencySymbol);
+
+        if (metaEl) {
+            metaEl.classList.toggle('hidden', !hasCurrency);
+        }
+
+        if (!hasCurrency) {
+            if (noteEl) noteEl.textContent = '';
+            if (toggleBtn) toggleBtn.style.display = 'none';
+            if (rateEl) rateEl.textContent = '';
+            return;
+        }
+
+        const isUsdMode = this.ratiosCurrencyMode === 'usd';
+        const displayCode = isUsdMode ? 'USD' : currencyCode!;
+        const displaySymbol = isUsdMode ? '$' : currencySymbol!;
+        if (noteEl) noteEl.textContent = `All figures in ${displayCode} (${displaySymbol})`;
+
+        const canConvert = Boolean(this.ratiosUsdRate) && currencyCode !== 'USD';
+        if (toggleBtn) {
+            toggleBtn.style.display = canConvert ? 'inline-flex' : 'none';
+            if (canConvert) {
+                toggleBtn.textContent = isUsdMode ? `View in ${currencyCode}` : 'Convert to USD';
+            }
+        }
+
+        if (rateEl) {
+            if (isUsdMode && canConvert && this.ratiosUsdRate) {
+                rateEl.textContent = `Rate: 1 ${currencyCode} = ${this.formatFxRate(this.ratiosUsdRate)} USD`;
+                rateEl.classList.remove('hidden');
+            } else {
+                rateEl.textContent = '';
+                rateEl.classList.add('hidden');
+            }
+        }
+    }
+
     private renderRatios(ratios: FinancialRatios): void {
         const bodyEl = document.getElementById('ratios-body');
         if (!bodyEl) return;
 
+        this.updateRatiosCurrencyUI();
+
+        const useUsd = this.ratiosCurrencyMode === 'usd' && this.ratiosUsdRate !== null;
+        const currencySymbol = useUsd ? '$' : (this.ratiosCurrencySymbol || '$');
+        const usdRate = this.ratiosUsdRate ?? 1;
+
         const fmtValue = (val: number | null, type: 'number' | 'percent' | 'currency' | 'ratio' = 'number'): string => {
+            if (type === 'currency') {
+                if (val === null || val === undefined || isNaN(val)) return 'N/A';
+                const converted = useUsd ? val * usdRate : val;
+                return formatStatementValue(converted, currencySymbol);
+            }
             return formatRatioValue(val, type);
         };
 

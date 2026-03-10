@@ -60,6 +60,9 @@ export interface NewsResponse {
 
 export interface FinancialRatios {
     symbol: string;
+    currency?: string | null;
+    usd_fx_rate?: number | null;
+    usd_fx_pair?: string | null;
     pe_ratio: number | null;
     forward_pe: number | null;
     peg_ratio: number | null;

@@ -69,6 +69,9 @@ pub struct NewsResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinancialRatios {
     pub symbol: String,
+    pub currency: Option<String>,
+    pub usd_fx_rate: Option<f64>,
+    pub usd_fx_pair: Option<String>,
     pub pe_ratio: Option<f64>,
     pub forward_pe: Option<f64>,
     pub peg_ratio: Option<f64>,
